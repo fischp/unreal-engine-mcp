@@ -1,9 +1,9 @@
 {
 	"FileVersion": 3,
 	"Version": 1,
-	"VersionName": "1.0",
+	"VersionName": "1.0-UE4.27",
 	"FriendlyName": "UnrealMCP",
-	"Description": "Model Context Protocol implementation for Unreal Engine",
+	"Description": "Model Context Protocol implementation for Unreal Engine 4.27",
 	"Category": "Editor",
 	"CreatedBy": "Flopperam",
 	"CreatedByURL": "",
@@ -14,6 +14,7 @@
 	"IsBetaVersion": false,
 	"IsExperimentalVersion": false,
 	"Installed": false,
+	"EngineVersion": "4.27.0",
 	"Modules": [
 		{
 			"Name": "UnrealMCP",
@@ -25,11 +26,5 @@
 				"Linux"
 			]
 		}
-	],
-	"Plugins": [
-		{
-			"Name": "EditorScriptingUtilities",
-			"Enabled": true
-		}
 	]
-} 
+}

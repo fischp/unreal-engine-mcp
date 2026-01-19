@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "EditorSubsystem.h"
+#include "Tickable.h"
 #include "Sockets.h"
 #include "SocketSubsystem.h"
 #include "Http.h"
@@ -9,30 +9,34 @@
 #include "Interfaces/IPv4/IPv4Address.h"
 #include "Interfaces/IPv4/IPv4Endpoint.h"
 #include "Commands/EpicUnrealMCPEditorCommands.h"
-#include "Commands/EpicUnrealMCPBlueprintCommands.h"
-#include "Commands/EpicUnrealMCPBlueprintGraphCommands.h"
-#include "EpicUnrealMCPBridge.generated.h"
 
 class FMCPServerRunnable;
 
 /**
- * Editor subsystem for MCP Bridge
+ * MCP Bridge using FTickableEditorObject pattern for UE4.27 compatibility.
  * Handles communication between external tools and the Unreal Editor
  * through a TCP socket connection. Commands are received as JSON and
  * routed to appropriate command handlers.
+ *
+ * This replaces the UE5+ UEditorSubsystem pattern with a singleton
+ * that implements FTickableEditorObject for editor tick support.
  */
-UCLASS()
-class UNREALMCP_API UEpicUnrealMCPBridge : public UEditorSubsystem
+class UNREALMCP_API FEpicUnrealMCPBridge : public FTickableEditorObject
 {
-	GENERATED_BODY()
-
 public:
-	UEpicUnrealMCPBridge();
-	virtual ~UEpicUnrealMCPBridge();
+	FEpicUnrealMCPBridge();
+	virtual ~FEpicUnrealMCPBridge();
 
-	// UEditorSubsystem implementation
-	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
-	virtual void Deinitialize() override;
+	// Singleton access
+	static FEpicUnrealMCPBridge& Get();
+	static void Initialize();
+	static void Shutdown();
+	static bool IsInitialized() { return Instance.IsValid(); }
+
+	// FTickableEditorObject interface
+	virtual void Tick(float DeltaTime) override;
+	virtual bool IsTickable() const override { return bIsRunning; }
+	virtual TStatId GetStatId() const override;
 
 	// Server functions
 	void StartServer();
@@ -43,6 +47,9 @@ public:
 	FString ExecuteCommand(const FString& CommandType, const TSharedPtr<FJsonObject>& Params);
 
 private:
+	// Singleton instance
+	static TUniquePtr<FEpicUnrealMCPBridge> Instance;
+
 	// Server state
 	bool bIsRunning;
 	TSharedPtr<FSocket> ListenerSocket;
@@ -53,8 +60,6 @@ private:
 	FIPv4Address ServerAddress;
 	uint16 Port;
 
-	// Command handler instances
+	// Command handler instance
 	TSharedPtr<FEpicUnrealMCPEditorCommands> EditorCommands;
-	TSharedPtr<FEpicUnrealMCPBlueprintCommands> BlueprintCommands;
-	TSharedPtr<FEpicUnrealMCPBlueprintGraphCommands> BlueprintGraphCommands;
-}; 
+};
