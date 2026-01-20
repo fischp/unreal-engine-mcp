@@ -223,10 +223,44 @@ uv run unreal_mcp_server_advanced.py
 
 ### 3. Configure Your AI Client
 
-Add this to your MCP configuration:
+Choose the configuration method for your AI client:
+
+---
+
+#### Claude Code (CLI)
+
+Register the MCP server using the `claude mcp add` command:
+
+```bash
+# Using the virtual environment Python (recommended)
+claude mcp add unreal-mcp -- "/path/to/unreal-engine-mcp/Python/.venv/Scripts/python.exe" "/path/to/unreal-engine-mcp/Python/unreal_mcp_server_advanced.py"
+
+# Or using uv
+claude mcp add unreal-mcp -- uv --directory "/path/to/unreal-engine-mcp/Python" run unreal_mcp_server_advanced.py
+```
+
+**Windows example:**
+```bash
+claude mcp add unreal-mcp -- "C:\Users\YourName\Documents\unreal-engine-mcp\Python\.venv\Scripts\python.exe" "C:\Users\YourName\Documents\unreal-engine-mcp\Python\unreal_mcp_server_advanced.py"
+```
+
+**Verify registration:**
+```bash
+claude mcp list
+```
+
+You should see `unreal-mcp` with status `✓ Connected`.
+
+**Note:** After registering, restart your Claude Code session for the tools to become available.
+
+---
+
+#### Cursor / Claude Desktop / Windsurf
+
+Add this to your MCP configuration file:
 
 **Cursor**: `.cursor/mcp.json`
-**Claude Desktop**: `~/.config/claude-desktop/mcp.json`
+**Claude Desktop**: `~/.config/claude-desktop/mcp.json` (Mac/Linux) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows)
 **Windsurf**: `~/.config/windsurf/mcp.json`
 
 ```json
@@ -248,6 +282,8 @@ Add this to your MCP configuration:
 Note that on Mac, and sometimes on Windows, you may have to replace the "uv" string passed as the value to "command" in the above `mcp.json` file with the exact absolute path to the uv executable. To get that path, run one of these commands:
 - Mac: `which uv`
 - Windows: `where uv`
+
+---
 
 > **Having issues with setup?** Check our [Debugging & Troubleshooting Guide](DEBUGGING.md) for solutions to common problems like MCP installation errors and configuration issues.
 >
