@@ -25,6 +25,31 @@
 #include "IAssetRegistry.h"
 #include "ProjectDescriptor.h"
 
+// UMG/Widget Blueprint includes
+#include "WidgetBlueprint.h"
+#include "Blueprint/WidgetTree.h"
+#include "Blueprint/UserWidget.h"
+#include "Components/Widget.h"
+#include "Components/PanelWidget.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
+#include "Components/Button.h"
+#include "Components/TextBlock.h"
+#include "Components/Image.h"
+#include "Components/Border.h"
+#include "Components/Overlay.h"
+#include "Components/OverlaySlot.h"
+#include "Components/SizeBox.h"
+#include "Components/Spacer.h"
+#include "Components/ScrollBox.h"
+#include "WidgetBlueprintFactory.h"
+#include "Kismet2/KismetEditorUtilities.h"
+#include "ObjectTools.h"
+
 FEpicUnrealMCPEditorCommands::FEpicUnrealMCPEditorCommands()
 {
 }
@@ -88,6 +113,55 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleCommand(const FStrin
 	else if (CommandType == TEXT("editor_move_camera"))
 	{
 		return HandleEditorMoveCamera(Params);
+	}
+	// Widget Blueprint commands - CREATE
+	else if (CommandType == TEXT("create_widget_blueprint"))
+	{
+		return HandleCreateWidgetBlueprint(Params);
+	}
+	else if (CommandType == TEXT("add_widget_to_blueprint"))
+	{
+		return HandleAddWidgetToBlueprint(Params);
+	}
+	// Widget Blueprint commands - READ
+	else if (CommandType == TEXT("list_widget_blueprints"))
+	{
+		return HandleListWidgetBlueprints(Params);
+	}
+	else if (CommandType == TEXT("get_widget_hierarchy"))
+	{
+		return HandleGetWidgetHierarchy(Params);
+	}
+	else if (CommandType == TEXT("get_widget_properties"))
+	{
+		return HandleGetWidgetProperties(Params);
+	}
+	// Widget Blueprint commands - UPDATE
+	else if (CommandType == TEXT("set_widget_properties"))
+	{
+		return HandleSetWidgetProperties(Params);
+	}
+	else if (CommandType == TEXT("rename_widget"))
+	{
+		return HandleRenameWidget(Params);
+	}
+	else if (CommandType == TEXT("reparent_widget"))
+	{
+		return HandleReparentWidget(Params);
+	}
+	// Widget Blueprint commands - DELETE
+	else if (CommandType == TEXT("remove_widget_from_blueprint"))
+	{
+		return HandleRemoveWidgetFromBlueprint(Params);
+	}
+	else if (CommandType == TEXT("delete_widget_blueprint"))
+	{
+		return HandleDeleteWidgetBlueprint(Params);
+	}
+	// Widget Blueprint commands - RUNTIME
+	else if (CommandType == TEXT("show_widget"))
+	{
+		return HandleShowWidget(Params);
 	}
 
 	return CreateErrorResponse(FString::Printf(TEXT("Unknown editor command: %s"), *CommandType));
@@ -824,5 +898,705 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleEditorMoveCamera(con
 
 	Result->SetBoolField(TEXT("success"), true);
 
+	return Result;
+}
+
+// ============================================================================
+// Widget Blueprint Helper Methods
+// ============================================================================
+
+UWidgetBlueprint* FEpicUnrealMCPEditorCommands::LoadWidgetBlueprint(const FString& AssetPath)
+{
+	return LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+}
+
+UWidget* FEpicUnrealMCPEditorCommands::FindWidgetByName(UWidgetBlueprint* WidgetBP, const FString& WidgetName)
+{
+	if (!WidgetBP || !WidgetBP->WidgetTree)
+	{
+		return nullptr;
+	}
+
+	// Search through all widgets in the tree
+	TArray<UWidget*> AllWidgets;
+	WidgetBP->WidgetTree->GetAllWidgets(AllWidgets);
+
+	for (UWidget* Widget : AllWidgets)
+	{
+		if (Widget && Widget->GetName() == WidgetName)
+		{
+			return Widget;
+		}
+	}
+
+	return nullptr;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::WidgetToJson(UWidget* Widget, bool bRecursive)
+{
+	if (!Widget)
+	{
+		return nullptr;
+	}
+
+	TSharedPtr<FJsonObject> WidgetObj = MakeShared<FJsonObject>();
+	WidgetObj->SetStringField(TEXT("name"), Widget->GetName());
+	WidgetObj->SetStringField(TEXT("class"), Widget->GetClass()->GetName());
+	WidgetObj->SetBoolField(TEXT("is_visible"), Widget->IsVisible());
+
+	// Add slot information if available
+	if (Widget->Slot)
+	{
+		TSharedPtr<FJsonObject> SlotObj = MakeShared<FJsonObject>();
+		SlotObj->SetStringField(TEXT("slot_class"), Widget->Slot->GetClass()->GetName());
+
+		// Handle CanvasPanelSlot properties
+		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Widget->Slot))
+		{
+			FVector2D Position = CanvasSlot->GetPosition();
+			FVector2D Size = CanvasSlot->GetSize();
+			FAnchors Anchors = CanvasSlot->GetAnchors();
+
+			TArray<TSharedPtr<FJsonValue>> PosArray;
+			PosArray.Add(MakeShared<FJsonValueNumber>(Position.X));
+			PosArray.Add(MakeShared<FJsonValueNumber>(Position.Y));
+			SlotObj->SetArrayField(TEXT("position"), PosArray);
+
+			TArray<TSharedPtr<FJsonValue>> SizeArray;
+			SizeArray.Add(MakeShared<FJsonValueNumber>(Size.X));
+			SizeArray.Add(MakeShared<FJsonValueNumber>(Size.Y));
+			SlotObj->SetArrayField(TEXT("size"), SizeArray);
+
+			TArray<TSharedPtr<FJsonValue>> AnchorsArray;
+			AnchorsArray.Add(MakeShared<FJsonValueNumber>(Anchors.Minimum.X));
+			AnchorsArray.Add(MakeShared<FJsonValueNumber>(Anchors.Minimum.Y));
+			AnchorsArray.Add(MakeShared<FJsonValueNumber>(Anchors.Maximum.X));
+			AnchorsArray.Add(MakeShared<FJsonValueNumber>(Anchors.Maximum.Y));
+			SlotObj->SetArrayField(TEXT("anchors"), AnchorsArray);
+		}
+
+		WidgetObj->SetObjectField(TEXT("slot"), SlotObj);
+	}
+
+	// If it's a panel, include children
+	UPanelWidget* Panel = Cast<UPanelWidget>(Widget);
+	if (Panel && bRecursive)
+	{
+		TArray<TSharedPtr<FJsonValue>> ChildrenArray;
+		for (int32 i = 0; i < Panel->GetChildrenCount(); ++i)
+		{
+			UWidget* Child = Panel->GetChildAt(i);
+			if (Child)
+			{
+				TSharedPtr<FJsonObject> ChildJson = WidgetToJson(Child, true);
+				if (ChildJson.IsValid())
+				{
+					ChildrenArray.Add(MakeShared<FJsonValueObject>(ChildJson));
+				}
+			}
+		}
+		WidgetObj->SetArrayField(TEXT("children"), ChildrenArray);
+	}
+
+	return WidgetObj;
+}
+
+// ============================================================================
+// Widget Blueprint READ Operations
+// ============================================================================
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleListWidgetBlueprints(const TSharedPtr<FJsonObject>& Params)
+{
+	FString SearchPath = TEXT("/Game");
+	Params->TryGetStringField(TEXT("path"), SearchPath);
+
+	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+	IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
+
+	TArray<FAssetData> AssetDataList;
+	FARFilter Filter;
+	Filter.ClassNames.Add(UWidgetBlueprint::StaticClass()->GetFName());
+	Filter.PackagePaths.Add(*SearchPath);
+	Filter.bRecursivePaths = true;
+
+	AssetRegistry.GetAssets(Filter, AssetDataList);
+
+	TArray<TSharedPtr<FJsonValue>> WidgetBPArray;
+	for (const FAssetData& AssetData : AssetDataList)
+	{
+		TSharedPtr<FJsonObject> WBPObj = MakeShared<FJsonObject>();
+		WBPObj->SetStringField(TEXT("name"), AssetData.AssetName.ToString());
+		WBPObj->SetStringField(TEXT("path"), AssetData.ObjectPath.ToString());
+		WBPObj->SetStringField(TEXT("package"), AssetData.PackageName.ToString());
+		WidgetBPArray.Add(MakeShared<FJsonValueObject>(WBPObj));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetArrayField(TEXT("widget_blueprints"), WidgetBPArray);
+	Result->SetNumberField(TEXT("count"), WidgetBPArray.Num());
+	return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleGetWidgetHierarchy(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintPath;
+	if (!Params->TryGetStringField(TEXT("blueprint_path"), BlueprintPath))
+	{
+		return CreateErrorResponse(TEXT("Missing 'blueprint_path' parameter"));
+	}
+
+	UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(BlueprintPath);
+	if (!WidgetBP)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Failed to load Widget Blueprint: %s"), *BlueprintPath));
+	}
+
+	if (!WidgetBP->WidgetTree)
+	{
+		return CreateErrorResponse(TEXT("Widget Blueprint has no WidgetTree"));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("blueprint_path"), BlueprintPath);
+
+	if (WidgetBP->WidgetTree->RootWidget)
+	{
+		Result->SetObjectField(TEXT("root_widget"), WidgetToJson(WidgetBP->WidgetTree->RootWidget, true));
+	}
+	else
+	{
+		Result->SetField(TEXT("root_widget"), MakeShared<FJsonValueNull>());
+	}
+
+	return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleGetWidgetProperties(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintPath, WidgetName;
+	if (!Params->TryGetStringField(TEXT("blueprint_path"), BlueprintPath))
+	{
+		return CreateErrorResponse(TEXT("Missing 'blueprint_path' parameter"));
+	}
+	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'widget_name' parameter"));
+	}
+
+	UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(BlueprintPath);
+	if (!WidgetBP)
+	{
+		return CreateErrorResponse(TEXT("Failed to load Widget Blueprint"));
+	}
+
+	UWidget* Widget = FindWidgetByName(WidgetBP, WidgetName);
+	if (!Widget)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Widget not found: %s"), *WidgetName));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetObjectField(TEXT("widget"), WidgetToJson(Widget, false));
+
+	// Add type-specific properties
+	if (UTextBlock* TextBlock = Cast<UTextBlock>(Widget))
+	{
+		Result->SetStringField(TEXT("text"), TextBlock->GetText().ToString());
+	}
+
+	return Result;
+}
+
+// ============================================================================
+// Widget Blueprint CREATE Operations
+// ============================================================================
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleCreateWidgetBlueprint(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetName;
+	if (!Params->TryGetStringField(TEXT("name"), AssetName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'name' parameter"));
+	}
+
+	FString PackagePath = TEXT("/Game/Widgets");
+	Params->TryGetStringField(TEXT("path"), PackagePath);
+
+	// Create package
+	FString PackageName = PackagePath / AssetName;
+	UPackage* Package = CreatePackage(*PackageName);
+	if (!Package)
+	{
+		return CreateErrorResponse(TEXT("Failed to create package"));
+	}
+
+	// Use factory to create Widget Blueprint
+	UWidgetBlueprintFactory* Factory = NewObject<UWidgetBlueprintFactory>();
+	Factory->ParentClass = UUserWidget::StaticClass();
+
+	UWidgetBlueprint* NewWidgetBP = Cast<UWidgetBlueprint>(
+		Factory->FactoryCreateNew(
+			UWidgetBlueprint::StaticClass(),
+			Package,
+			*AssetName,
+			RF_Public | RF_Standalone,
+			nullptr,
+			GWarn
+		)
+	);
+
+	if (NewWidgetBP)
+	{
+		// Notify asset registry
+		FAssetRegistryModule::AssetCreated(NewWidgetBP);
+		Package->MarkPackageDirty();
+
+		// Return success with asset path
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetBoolField(TEXT("success"), true);
+		Result->SetStringField(TEXT("asset_path"), PackageName + TEXT(".") + AssetName);
+		Result->SetStringField(TEXT("asset_name"), AssetName);
+		return Result;
+	}
+
+	return CreateErrorResponse(TEXT("Failed to create Widget Blueprint"));
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleAddWidgetToBlueprint(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintPath, WidgetType, WidgetName, ParentWidgetName;
+
+	if (!Params->TryGetStringField(TEXT("blueprint_path"), BlueprintPath))
+	{
+		return CreateErrorResponse(TEXT("Missing 'blueprint_path' parameter"));
+	}
+	if (!Params->TryGetStringField(TEXT("widget_type"), WidgetType))
+	{
+		return CreateErrorResponse(TEXT("Missing 'widget_type' parameter"));
+	}
+	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'widget_name' parameter"));
+	}
+
+	Params->TryGetStringField(TEXT("parent_widget"), ParentWidgetName);
+
+	UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(BlueprintPath);
+	if (!WidgetBP)
+	{
+		return CreateErrorResponse(TEXT("Failed to load Widget Blueprint"));
+	}
+
+	UWidgetTree* WidgetTree = WidgetBP->WidgetTree;
+	if (!WidgetTree)
+	{
+		return CreateErrorResponse(TEXT("Widget Blueprint has no WidgetTree"));
+	}
+
+	// Determine widget class to create
+	UClass* WidgetClass = nullptr;
+	if (WidgetType == TEXT("Button")) WidgetClass = UButton::StaticClass();
+	else if (WidgetType == TEXT("TextBlock")) WidgetClass = UTextBlock::StaticClass();
+	else if (WidgetType == TEXT("Image")) WidgetClass = UImage::StaticClass();
+	else if (WidgetType == TEXT("CanvasPanel")) WidgetClass = UCanvasPanel::StaticClass();
+	else if (WidgetType == TEXT("VerticalBox")) WidgetClass = UVerticalBox::StaticClass();
+	else if (WidgetType == TEXT("HorizontalBox")) WidgetClass = UHorizontalBox::StaticClass();
+	else if (WidgetType == TEXT("Border")) WidgetClass = UBorder::StaticClass();
+	else if (WidgetType == TEXT("Overlay")) WidgetClass = UOverlay::StaticClass();
+	else if (WidgetType == TEXT("SizeBox")) WidgetClass = USizeBox::StaticClass();
+	else if (WidgetType == TEXT("ScrollBox")) WidgetClass = UScrollBox::StaticClass();
+	else if (WidgetType == TEXT("Spacer")) WidgetClass = USpacer::StaticClass();
+	else
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Unknown widget type: %s"), *WidgetType));
+	}
+
+	// Create the widget using WidgetTree
+	UWidget* NewWidget = WidgetTree->ConstructWidget<UWidget>(WidgetClass, *WidgetName);
+	if (!NewWidget)
+	{
+		return CreateErrorResponse(TEXT("Failed to construct widget"));
+	}
+
+	// Find parent or use root
+	UPanelWidget* ParentPanel = nullptr;
+	if (!ParentWidgetName.IsEmpty())
+	{
+		UWidget* ParentWidget = FindWidgetByName(WidgetBP, ParentWidgetName);
+		ParentPanel = Cast<UPanelWidget>(ParentWidget);
+		if (!ParentPanel)
+		{
+			return CreateErrorResponse(TEXT("Parent widget is not a panel or not found"));
+		}
+	}
+	else
+	{
+		// If no parent specified, set as root or add to root panel
+		if (!WidgetTree->RootWidget)
+		{
+			WidgetTree->RootWidget = NewWidget;
+		}
+		else
+		{
+			ParentPanel = Cast<UPanelWidget>(WidgetTree->RootWidget);
+			if (!ParentPanel)
+			{
+				return CreateErrorResponse(TEXT("Root widget is not a panel; cannot add children without specifying parent"));
+			}
+		}
+	}
+
+	// Add to parent panel if applicable
+	if (ParentPanel)
+	{
+		UPanelSlot* Slot = ParentPanel->AddChild(NewWidget);
+		if (!Slot)
+		{
+			return CreateErrorResponse(TEXT("Failed to add widget to parent panel"));
+		}
+	}
+
+	// Mark dirty and compile
+	WidgetBP->MarkPackageDirty();
+	FKismetEditorUtilities::CompileBlueprint(WidgetBP);
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("widget_name"), WidgetName);
+	Result->SetStringField(TEXT("widget_type"), WidgetType);
+	return Result;
+}
+
+// ============================================================================
+// Widget Blueprint UPDATE Operations
+// ============================================================================
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSetWidgetProperties(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintPath, WidgetName;
+	if (!Params->TryGetStringField(TEXT("blueprint_path"), BlueprintPath))
+	{
+		return CreateErrorResponse(TEXT("Missing 'blueprint_path' parameter"));
+	}
+	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'widget_name' parameter"));
+	}
+
+	UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(BlueprintPath);
+	if (!WidgetBP)
+	{
+		return CreateErrorResponse(TEXT("Failed to load Widget Blueprint"));
+	}
+
+	UWidget* Widget = FindWidgetByName(WidgetBP, WidgetName);
+	if (!Widget)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Widget not found: %s"), *WidgetName));
+	}
+
+	// Handle TextBlock text
+	if (UTextBlock* TextBlock = Cast<UTextBlock>(Widget))
+	{
+		FString TextValue;
+		if (Params->TryGetStringField(TEXT("text"), TextValue))
+		{
+			TextBlock->SetText(FText::FromString(TextValue));
+		}
+
+		// Font size
+		int32 FontSize;
+		if (Params->TryGetNumberField(TEXT("font_size"), FontSize))
+		{
+			FSlateFontInfo FontInfo = TextBlock->Font;
+			FontInfo.Size = FontSize;
+			TextBlock->SetFont(FontInfo);
+		}
+	}
+
+	// Handle visibility
+	FString VisibilityStr;
+	if (Params->TryGetStringField(TEXT("visibility"), VisibilityStr))
+	{
+		if (VisibilityStr == TEXT("Visible")) Widget->SetVisibility(ESlateVisibility::Visible);
+		else if (VisibilityStr == TEXT("Hidden")) Widget->SetVisibility(ESlateVisibility::Hidden);
+		else if (VisibilityStr == TEXT("Collapsed")) Widget->SetVisibility(ESlateVisibility::Collapsed);
+		else if (VisibilityStr == TEXT("HitTestInvisible")) Widget->SetVisibility(ESlateVisibility::HitTestInvisible);
+		else if (VisibilityStr == TEXT("SelfHitTestInvisible")) Widget->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	}
+
+	// Handle CanvasPanel slot properties (position, size, anchors)
+	if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Widget->Slot))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* PositionArray;
+		if (Params->TryGetArrayField(TEXT("position"), PositionArray) && PositionArray->Num() >= 2)
+		{
+			FVector2D Position((*PositionArray)[0]->AsNumber(), (*PositionArray)[1]->AsNumber());
+			CanvasSlot->SetPosition(Position);
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* SizeArray;
+		if (Params->TryGetArrayField(TEXT("size"), SizeArray) && SizeArray->Num() >= 2)
+		{
+			FVector2D Size((*SizeArray)[0]->AsNumber(), (*SizeArray)[1]->AsNumber());
+			CanvasSlot->SetSize(Size);
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* AnchorsArray;
+		if (Params->TryGetArrayField(TEXT("anchors"), AnchorsArray) && AnchorsArray->Num() >= 4)
+		{
+			FAnchors Anchors;
+			Anchors.Minimum.X = (*AnchorsArray)[0]->AsNumber();
+			Anchors.Minimum.Y = (*AnchorsArray)[1]->AsNumber();
+			Anchors.Maximum.X = (*AnchorsArray)[2]->AsNumber();
+			Anchors.Maximum.Y = (*AnchorsArray)[3]->AsNumber();
+			CanvasSlot->SetAnchors(Anchors);
+		}
+	}
+
+	WidgetBP->MarkPackageDirty();
+	FKismetEditorUtilities::CompileBlueprint(WidgetBP);
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("widget_name"), WidgetName);
+	return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleRenameWidget(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintPath, WidgetName, NewName;
+	if (!Params->TryGetStringField(TEXT("blueprint_path"), BlueprintPath))
+	{
+		return CreateErrorResponse(TEXT("Missing 'blueprint_path' parameter"));
+	}
+	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'widget_name' parameter"));
+	}
+	if (!Params->TryGetStringField(TEXT("new_name"), NewName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'new_name' parameter"));
+	}
+
+	UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(BlueprintPath);
+	if (!WidgetBP)
+	{
+		return CreateErrorResponse(TEXT("Failed to load Widget Blueprint"));
+	}
+
+	UWidget* Widget = FindWidgetByName(WidgetBP, WidgetName);
+	if (!Widget)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Widget not found: %s"), *WidgetName));
+	}
+
+	// Rename the widget
+	Widget->Rename(*NewName, WidgetBP->WidgetTree);
+
+	WidgetBP->MarkPackageDirty();
+	FKismetEditorUtilities::CompileBlueprint(WidgetBP);
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("old_name"), WidgetName);
+	Result->SetStringField(TEXT("new_name"), NewName);
+	return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleReparentWidget(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintPath, WidgetName, NewParentName;
+	if (!Params->TryGetStringField(TEXT("blueprint_path"), BlueprintPath))
+	{
+		return CreateErrorResponse(TEXT("Missing 'blueprint_path' parameter"));
+	}
+	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'widget_name' parameter"));
+	}
+	if (!Params->TryGetStringField(TEXT("new_parent"), NewParentName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'new_parent' parameter"));
+	}
+
+	UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(BlueprintPath);
+	if (!WidgetBP)
+	{
+		return CreateErrorResponse(TEXT("Failed to load Widget Blueprint"));
+	}
+
+	UWidget* Widget = FindWidgetByName(WidgetBP, WidgetName);
+	UWidget* NewParent = FindWidgetByName(WidgetBP, NewParentName);
+
+	if (!Widget)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Widget not found: %s"), *WidgetName));
+	}
+
+	UPanelWidget* NewParentPanel = Cast<UPanelWidget>(NewParent);
+	if (!NewParentPanel)
+	{
+		return CreateErrorResponse(TEXT("New parent must be a panel widget"));
+	}
+
+	// Remove from current parent
+	if (Widget->GetParent())
+	{
+		Widget->RemoveFromParent();
+	}
+
+	// Add to new parent
+	UPanelSlot* NewSlot = NewParentPanel->AddChild(Widget);
+	if (!NewSlot)
+	{
+		return CreateErrorResponse(TEXT("Failed to add widget to new parent"));
+	}
+
+	WidgetBP->MarkPackageDirty();
+	FKismetEditorUtilities::CompileBlueprint(WidgetBP);
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("widget_name"), WidgetName);
+	Result->SetStringField(TEXT("new_parent"), NewParentName);
+	return Result;
+}
+
+// ============================================================================
+// Widget Blueprint DELETE Operations
+// ============================================================================
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleRemoveWidgetFromBlueprint(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintPath, WidgetName;
+	if (!Params->TryGetStringField(TEXT("blueprint_path"), BlueprintPath))
+	{
+		return CreateErrorResponse(TEXT("Missing 'blueprint_path' parameter"));
+	}
+	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'widget_name' parameter"));
+	}
+
+	UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(BlueprintPath);
+	if (!WidgetBP || !WidgetBP->WidgetTree)
+	{
+		return CreateErrorResponse(TEXT("Failed to load Widget Blueprint"));
+	}
+
+	UWidget* Widget = FindWidgetByName(WidgetBP, WidgetName);
+	if (!Widget)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Widget not found: %s"), *WidgetName));
+	}
+
+	// Remove widget from tree
+	WidgetBP->WidgetTree->RemoveWidget(Widget);
+
+	WidgetBP->MarkPackageDirty();
+	FKismetEditorUtilities::CompileBlueprint(WidgetBP);
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("removed_widget"), WidgetName);
+	return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleDeleteWidgetBlueprint(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return CreateErrorResponse(TEXT("Missing 'asset_path' parameter"));
+	}
+
+	UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(AssetPath);
+	if (!WidgetBP)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Failed to load Widget Blueprint: %s"), *AssetPath));
+	}
+
+	// Delete the asset
+	TArray<UObject*> ObjectsToDelete;
+	ObjectsToDelete.Add(WidgetBP);
+
+	int32 DeletedCount = ObjectTools::DeleteObjects(ObjectsToDelete, true);
+
+	if (DeletedCount > 0)
+	{
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetBoolField(TEXT("success"), true);
+		Result->SetStringField(TEXT("deleted_asset"), AssetPath);
+		return Result;
+	}
+
+	return CreateErrorResponse(TEXT("Failed to delete Widget Blueprint"));
+}
+
+// ============================================================================
+// Widget Blueprint RUNTIME Operations
+// ============================================================================
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleShowWidget(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintPath;
+	if (!Params->TryGetStringField(TEXT("blueprint_path"), BlueprintPath))
+	{
+		return CreateErrorResponse(TEXT("Missing 'blueprint_path' parameter"));
+	}
+
+	int32 ZOrder = 0;
+	Params->TryGetNumberField(TEXT("z_order"), ZOrder);
+
+	// Load widget blueprint
+	UWidgetBlueprint* WidgetBP = LoadWidgetBlueprint(BlueprintPath);
+	if (!WidgetBP)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Failed to load Widget Blueprint: %s"), *BlueprintPath));
+	}
+
+	if (!WidgetBP->GeneratedClass)
+	{
+		return CreateErrorResponse(TEXT("Widget Blueprint has no GeneratedClass - compile it first"));
+	}
+
+	// Get the PIE world if playing, otherwise editor world
+	UWorld* World = nullptr;
+	if (GEditor && GEditor->PlayWorld)
+	{
+		World = GEditor->PlayWorld;
+	}
+	else
+	{
+		return CreateErrorResponse(TEXT("Cannot show widget - no Play session active. Press Play first."));
+	}
+
+	// Get player controller
+	APlayerController* PC = World->GetFirstPlayerController();
+	if (!PC)
+	{
+		return CreateErrorResponse(TEXT("No player controller found in world"));
+	}
+
+	// Create widget and add to viewport
+	// Cast GeneratedClass to the correct type for CreateWidget
+	TSubclassOf<UUserWidget> WidgetClass = *WidgetBP->GeneratedClass;
+	UUserWidget* Widget = CreateWidget<UUserWidget>(PC, WidgetClass);
+	if (!Widget)
+	{
+		return CreateErrorResponse(TEXT("Failed to create widget instance"));
+	}
+
+	Widget->AddToViewport(ZOrder);
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("message"), TEXT("Widget displayed on viewport"));
+	Result->SetStringField(TEXT("blueprint_path"), BlueprintPath);
+	Result->SetNumberField(TEXT("z_order"), ZOrder);
 	return Result;
 }
