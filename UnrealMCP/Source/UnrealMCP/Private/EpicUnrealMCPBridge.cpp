@@ -235,7 +235,10 @@ FString FEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
 					 CommandType == TEXT("reparent_widget") ||
 					 CommandType == TEXT("remove_widget_from_blueprint") ||
 					 CommandType == TEXT("delete_widget_blueprint") ||
-					 CommandType == TEXT("show_widget"))
+					 CommandType == TEXT("show_widget") ||
+					 // Actor property commands
+					 CommandType == TEXT("get_actor_property") ||
+					 CommandType == TEXT("set_actor_property"))
 			{
 				ResultJson = EditorCommands->HandleCommand(CommandType, Params);
 			}

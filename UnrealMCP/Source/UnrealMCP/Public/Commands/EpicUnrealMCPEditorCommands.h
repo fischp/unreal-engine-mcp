@@ -66,6 +66,18 @@ private:
 	// RUNTIME Operations
 	TSharedPtr<FJsonObject> HandleShowWidget(const TSharedPtr<FJsonObject>& Params);
 
+	// ============================================================================
+	// Actor Property Commands
+	// ============================================================================
+	TSharedPtr<FJsonObject> HandleGetActorProperty(const TSharedPtr<FJsonObject>& Params);
+	TSharedPtr<FJsonObject> HandleSetActorProperty(const TSharedPtr<FJsonObject>& Params);
+
+	// Actor Property Helpers
+	AActor* FindActorByName(const FString& ActorName);
+	TSharedPtr<FJsonValue> PropertyToJsonValue(UProperty* Property, const void* ValuePtr);
+	bool JsonValueToProperty(const TSharedPtr<FJsonValue>& JsonValue, UProperty* Property, void* ValuePtr);
+	FString GetPropertyTypeName(UProperty* Property);
+
 	// Widget Blueprint Helpers
 	UWidgetBlueprint* LoadWidgetBlueprint(const FString& AssetPath);
 	UWidget* FindWidgetByName(UWidgetBlueprint* WidgetBP, const FString& WidgetName);
