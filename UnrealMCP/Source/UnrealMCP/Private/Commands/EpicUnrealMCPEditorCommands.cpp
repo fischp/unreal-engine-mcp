@@ -72,6 +72,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleCommand(const FStrin
 	{
 		return HandleSpawnActor(Params);
 	}
+	else if (CommandType == TEXT("spawn_blueprint_actor"))
+	{
+		return HandleSpawnBlueprintActor(Params);
+	}
 	else if (CommandType == TEXT("delete_actor"))
 	{
 		return HandleDeleteActor(Params);
@@ -455,6 +459,55 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSpawnActor(const TSh
 	}
 
 	return CreateErrorResponse(TEXT("Failed to create actor"));
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSpawnBlueprintActor(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintName;
+	if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'blueprint_name' parameter"));
+	}
+
+	FString ActorName;
+	if (!Params->TryGetStringField(TEXT("actor_name"), ActorName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'actor_name' parameter"));
+	}
+
+	FVector Location = GetVectorFromJson(Params, TEXT("location"));
+	FRotator Rotation = GetRotatorFromJson(Params, TEXT("rotation"));
+
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World)
+	{
+		return CreateErrorResponse(TEXT("Failed to get editor world"));
+	}
+
+	// Construct the Blueprint class path (append _C for the generated class if not already present)
+	FString BlueprintClassPath = BlueprintName;
+	if (!BlueprintClassPath.EndsWith(TEXT("_C")))
+	{
+		BlueprintClassPath += TEXT("_C");
+	}
+
+	// Load the Blueprint class
+	UClass* BlueprintClass = LoadClass<AActor>(nullptr, *BlueprintClassPath);
+	if (!BlueprintClass)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Failed to load Blueprint class: %s"), *BlueprintClassPath));
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Name = *ActorName;
+
+	AActor* NewActor = World->SpawnActor<AActor>(BlueprintClass, Location, Rotation, SpawnParams);
+	if (NewActor)
+	{
+		return ActorToJsonObject(NewActor, true);
+	}
+
+	return CreateErrorResponse(TEXT("Failed to spawn Blueprint actor"));
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleDeleteActor(const TSharedPtr<FJsonObject>& Params)
