@@ -39,7 +39,8 @@ public class UnrealMCP : ModuleRules
 				"Json",
 				"JsonUtilities",
 				"PhysicsCore",
-				"UnrealEd"
+				"UnrealEd",
+				"UMG"
 			}
 		);
 
@@ -53,7 +54,8 @@ public class UnrealMCP : ModuleRules
 				"Projects",
 				"AssetRegistry",
 				"LevelEditor",
-				"PropertyEditor"
+				"PropertyEditor",
+				"UMGEditor"
 			}
 		);
 

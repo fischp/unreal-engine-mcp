@@ -105,3 +105,4 @@ MCPGameProject/Config/DefaultEditorPerProjectUserSettings.ini
 # Clang
 .clang-format
 .clangd
+Python/unreal_mcp_ue4.log

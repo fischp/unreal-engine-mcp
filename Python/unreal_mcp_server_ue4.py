@@ -599,6 +599,280 @@ def find_actors_by_name(pattern: str) -> Dict[str, Any]:
         return {"success": False, "message": str(e)}
 
 
+# ============================================================================
+# Widget Blueprint Tools
+# ============================================================================
+
+@mcp.tool()
+def create_widget_blueprint(
+    name: str,
+    path: str = "/Game/Widgets"
+) -> Dict[str, Any]:
+    """Create a new Widget Blueprint asset.
+
+    Args:
+        name: Name for the new Widget Blueprint
+        path: Content folder path for the asset (default: /Game/Widgets)
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {"name": name, "path": path}
+        response = unreal.send_command("create_widget_blueprint", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"create_widget_blueprint error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+@mcp.tool()
+def add_widget_to_blueprint(
+    blueprint_path: str,
+    widget_type: str,
+    widget_name: str,
+    parent_widget: str = ""
+) -> Dict[str, Any]:
+    """Add a widget to an existing Widget Blueprint.
+
+    Args:
+        blueprint_path: Path to the Widget Blueprint asset
+        widget_type: Type of widget (Button, TextBlock, Image, CanvasPanel,
+                     VerticalBox, HorizontalBox, Border, Overlay, SizeBox,
+                     ScrollBox, Spacer)
+        widget_name: Name for the new widget
+        parent_widget: Optional name of parent widget (if empty, adds to root)
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {
+            "blueprint_path": blueprint_path,
+            "widget_type": widget_type,
+            "widget_name": widget_name,
+            "parent_widget": parent_widget
+        }
+        response = unreal.send_command("add_widget_to_blueprint", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"add_widget_to_blueprint error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+@mcp.tool()
+def list_widget_blueprints(path: str = "/Game") -> Dict[str, Any]:
+    """List all Widget Blueprints in the project.
+
+    Args:
+        path: Content path to search (default: /Game for entire project)
+    """
+    unreal = get_unreal_connection()
+    try:
+        response = unreal.send_command("list_widget_blueprints", {"path": path})
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"list_widget_blueprints error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+@mcp.tool()
+def get_widget_hierarchy(blueprint_path: str) -> Dict[str, Any]:
+    """Get the widget hierarchy tree of a Widget Blueprint.
+
+    Args:
+        blueprint_path: Path to the Widget Blueprint asset
+    """
+    unreal = get_unreal_connection()
+    try:
+        response = unreal.send_command("get_widget_hierarchy", {"blueprint_path": blueprint_path})
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"get_widget_hierarchy error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+@mcp.tool()
+def get_widget_properties(blueprint_path: str, widget_name: str) -> Dict[str, Any]:
+    """Get properties of a specific widget in a Widget Blueprint.
+
+    Args:
+        blueprint_path: Path to the Widget Blueprint asset
+        widget_name: Name of the widget to inspect
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {
+            "blueprint_path": blueprint_path,
+            "widget_name": widget_name
+        }
+        response = unreal.send_command("get_widget_properties", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"get_widget_properties error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+@mcp.tool()
+def set_widget_properties(
+    blueprint_path: str,
+    widget_name: str,
+    text: str = None,
+    font_size: int = None,
+    visibility: str = None,
+    position: List[float] = None,
+    size: List[float] = None,
+    anchors: List[float] = None
+) -> Dict[str, Any]:
+    """Set properties of a widget in a Widget Blueprint.
+
+    Args:
+        blueprint_path: Path to the Widget Blueprint asset
+        widget_name: Name of the widget to modify
+        text: Text content (for TextBlock widgets)
+        font_size: Font size (for TextBlock widgets)
+        visibility: Visibility state (Visible, Hidden, Collapsed, HitTestInvisible, SelfHitTestInvisible)
+        position: [X, Y] position in pixels (for widgets in CanvasPanel)
+        size: [Width, Height] in pixels (for widgets in CanvasPanel)
+        anchors: [MinX, MinY, MaxX, MaxY] anchor values 0-1 (for widgets in CanvasPanel)
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {
+            "blueprint_path": blueprint_path,
+            "widget_name": widget_name
+        }
+        if text is not None:
+            params["text"] = text
+        if font_size is not None:
+            params["font_size"] = font_size
+        if visibility is not None:
+            params["visibility"] = visibility
+        if position is not None:
+            params["position"] = position
+        if size is not None:
+            params["size"] = size
+        if anchors is not None:
+            params["anchors"] = anchors
+
+        response = unreal.send_command("set_widget_properties", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"set_widget_properties error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+@mcp.tool()
+def rename_widget(
+    blueprint_path: str,
+    widget_name: str,
+    new_name: str
+) -> Dict[str, Any]:
+    """Rename a widget in a Widget Blueprint.
+
+    Args:
+        blueprint_path: Path to the Widget Blueprint asset
+        widget_name: Current name of the widget
+        new_name: New name for the widget
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {
+            "blueprint_path": blueprint_path,
+            "widget_name": widget_name,
+            "new_name": new_name
+        }
+        response = unreal.send_command("rename_widget", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"rename_widget error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+@mcp.tool()
+def reparent_widget(
+    blueprint_path: str,
+    widget_name: str,
+    new_parent: str
+) -> Dict[str, Any]:
+    """Move a widget to a new parent in the hierarchy.
+
+    Args:
+        blueprint_path: Path to the Widget Blueprint asset
+        widget_name: Name of the widget to move
+        new_parent: Name of the new parent panel widget
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {
+            "blueprint_path": blueprint_path,
+            "widget_name": widget_name,
+            "new_parent": new_parent
+        }
+        response = unreal.send_command("reparent_widget", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"reparent_widget error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+@mcp.tool()
+def remove_widget_from_blueprint(
+    blueprint_path: str,
+    widget_name: str
+) -> Dict[str, Any]:
+    """Remove a widget from a Widget Blueprint.
+
+    Args:
+        blueprint_path: Path to the Widget Blueprint asset
+        widget_name: Name of the widget to remove
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {
+            "blueprint_path": blueprint_path,
+            "widget_name": widget_name
+        }
+        response = unreal.send_command("remove_widget_from_blueprint", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"remove_widget_from_blueprint error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+@mcp.tool()
+def delete_widget_blueprint(asset_path: str) -> Dict[str, Any]:
+    """Delete a Widget Blueprint asset from the project.
+
+    Args:
+        asset_path: Full path to the Widget Blueprint asset to delete
+    """
+    unreal = get_unreal_connection()
+    try:
+        response = unreal.send_command("delete_widget_blueprint", {"asset_path": asset_path})
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"delete_widget_blueprint error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+@mcp.tool()
+def show_widget(blueprint_path: str, z_order: int = 0) -> Dict[str, Any]:
+    """Display a Widget Blueprint on screen during Play in Editor (PIE).
+
+    Note: This command only works when a Play session is active.
+    Press Play in the editor first, then call this to show the widget.
+
+    Args:
+        blueprint_path: Path to the Widget Blueprint asset (e.g., /Game/Widgets/TestUI)
+        z_order: Z-order for layering, higher values appear on top (default: 0)
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {"blueprint_path": blueprint_path, "z_order": z_order}
+        response = unreal.send_command("show_widget", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"show_widget error: {e}")
+        return {"success": False, "message": str(e)}
+
+
 # Entry point
 if __name__ == "__main__":
     import asyncio
@@ -610,20 +884,30 @@ if __name__ == "__main__":
     print(f"Will connect to Unreal Engine at {UNREAL_HOST}:{UNREAL_PORT}")
     print()
     print("Available tools:")
-    print("  1. get_unreal_engine_path")
-    print("  2. get_unreal_project_path")
-    print("  3. editor_console_command")
-    print("  4. editor_project_info")
-    print("  5. editor_get_map_info")
-    print("  6. editor_search_assets")
-    print("  7. editor_get_world_outliner")
-    print("  8. editor_validate_assets")
-    print("  9. editor_create_object")
-    print(" 10. editor_update_object")
-    print(" 11. editor_delete_object")
-    print(" 12. editor_take_screenshot")
-    print(" 13. editor_move_camera")
-    print(" 14. find_actors_by_name (bonus)")
+    print("  Editor Tools:")
+    print("    - get_unreal_engine_path")
+    print("    - get_unreal_project_path")
+    print("    - editor_console_command")
+    print("    - editor_project_info")
+    print("    - editor_get_map_info")
+    print("    - editor_search_assets")
+    print("    - editor_validate_assets")
+    print("    - editor_take_screenshot")
+    print("    - editor_move_camera")
+    print("    - find_actors_by_name")
+    print()
+    print("  Widget Blueprint Tools:")
+    print("    - create_widget_blueprint")
+    print("    - add_widget_to_blueprint")
+    print("    - list_widget_blueprints")
+    print("    - get_widget_hierarchy")
+    print("    - get_widget_properties")
+    print("    - set_widget_properties")
+    print("    - rename_widget")
+    print("    - reparent_widget")
+    print("    - remove_widget_from_blueprint")
+    print("    - delete_widget_blueprint")
+    print("    - show_widget")
     print("=" * 60)
 
     mcp.run()

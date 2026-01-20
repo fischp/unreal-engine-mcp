@@ -11,7 +11,7 @@
 #include "Misc/ScopeLock.h"
 #include "HAL/PlatformTime.h"
 
-FMCPServerRunnable::FMCPServerRunnable(UEpicUnrealMCPBridge* InBridge, TSharedPtr<FSocket> InListenerSocket)
+FMCPServerRunnable::FMCPServerRunnable(FEpicUnrealMCPBridge* InBridge, TSharedPtr<FSocket> InListenerSocket)
     : Bridge(InBridge)
     , ListenerSocket(InListenerSocket)
     , bRunning(true)
