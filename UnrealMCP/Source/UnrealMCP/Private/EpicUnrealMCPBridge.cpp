@@ -64,10 +64,6 @@ void FEpicUnrealMCPBridge::Initialize()
 		Instance = MakeUnique<FEpicUnrealMCPBridge>();
 		FIPv4Address::Parse(MCP_SERVER_HOST, Instance->ServerAddress);
 		Instance->StartServer();
-
-		// Bind PIE delegates for auto-show widget on play
-		FEditorDelegates::BeginPIE.AddRaw(Instance.Get(), &FEpicUnrealMCPBridge::OnBeginPIE);
-		FEditorDelegates::EndPIE.AddRaw(Instance.Get(), &FEpicUnrealMCPBridge::OnEndPIE);
 	}
 }
 
@@ -76,11 +72,6 @@ void FEpicUnrealMCPBridge::Shutdown()
 	if (Instance.IsValid())
 	{
 		UE_LOG(LogTemp, Display, TEXT("FEpicUnrealMCPBridge: Shutting down singleton"));
-
-		// Unbind PIE delegates
-		FEditorDelegates::BeginPIE.RemoveAll(Instance.Get());
-		FEditorDelegates::EndPIE.RemoveAll(Instance.Get());
-
 		Instance->StopServer();
 		Instance.Reset();
 	}
@@ -299,45 +290,4 @@ FString FEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
 	});
 
 	return Future.Get();
-}
-
-// PIE (Play in Editor) Callbacks
-void FEpicUnrealMCPBridge::OnBeginPIE(bool bIsSimulating)
-{
-	UE_LOG(LogTemp, Display, TEXT("FEpicUnrealMCPBridge: PIE started, attempting to show widget"));
-
-	// Hardcoded widget path for testing
-	FString WidgetPath = TEXT("/Game/Widgets/TestUI");
-
-	// Small delay to ensure PIE world is ready
-	FTimerHandle TimerHandle;
-	GEditor->GetTimerManager()->SetTimer(TimerHandle, [this, WidgetPath]()
-	{
-		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
-		Params->SetStringField(TEXT("blueprint_path"), WidgetPath);
-		Params->SetNumberField(TEXT("z_order"), 0);
-
-		TSharedPtr<FJsonObject> Result = EditorCommands->HandleCommand(TEXT("show_widget"), Params);
-		if (Result.IsValid())
-		{
-			bool bSuccess = false;
-			Result->TryGetBoolField(TEXT("success"), bSuccess);
-			if (bSuccess)
-			{
-				UE_LOG(LogTemp, Display, TEXT("FEpicUnrealMCPBridge: Widget displayed successfully"));
-			}
-			else
-			{
-				FString Error;
-				Result->TryGetStringField(TEXT("error"), Error);
-				UE_LOG(LogTemp, Warning, TEXT("FEpicUnrealMCPBridge: Failed to show widget: %s"), *Error);
-			}
-		}
-	}, 0.5f, false);
-}
-
-void FEpicUnrealMCPBridge::OnEndPIE(bool bIsSimulating)
-{
-	UE_LOG(LogTemp, Display, TEXT("FEpicUnrealMCPBridge: PIE ended"));
-	// Widget is automatically destroyed when PIE ends
 }

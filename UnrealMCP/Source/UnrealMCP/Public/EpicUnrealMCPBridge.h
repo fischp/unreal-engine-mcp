@@ -46,10 +46,6 @@ public:
 	// Command execution
 	FString ExecuteCommand(const FString& CommandType, const TSharedPtr<FJsonObject>& Params);
 
-	// PIE (Play in Editor) callbacks
-	void OnBeginPIE(bool bIsSimulating);
-	void OnEndPIE(bool bIsSimulating);
-
 private:
 	// Singleton instance
 	static TUniquePtr<FEpicUnrealMCPBridge> Instance;
