@@ -519,6 +519,213 @@ def set_actor_transform(
         logger.error(f"set_actor_transform error: {e}")
         return {"success": False, "message": str(e)}
 
+@mcp.tool()
+def get_actor_property(name: str, property: str) -> Dict[str, Any]:
+    """Get a property value from an actor."""
+    unreal = get_unreal_connection()
+    if not unreal:
+        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+    try:
+        params = {"name": name, "property": property}
+        response = unreal.send_command("get_actor_property", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"get_actor_property error: {e}")
+        return {"success": False, "message": str(e)}
+
+@mcp.tool()
+def set_actor_property(name: str, property: str, value: Any) -> Dict[str, Any]:
+    """Set a property value on an actor."""
+    unreal = get_unreal_connection()
+    if not unreal:
+        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+    try:
+        params = {"name": name, "property": property, "value": value}
+        response = unreal.send_command("set_actor_property", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"set_actor_property error: {e}")
+        return {"success": False, "message": str(e)}
+
+@mcp.tool()
+def spawn_blueprint_actor(
+    blueprint_path: str,
+    actor_name: str,
+    location: List[float] = None,
+    rotation: List[float] = None
+) -> Dict[str, Any]:
+    """Spawn an actor from a Blueprint class.
+
+    Args:
+        blueprint_path: Full path to Blueprint, e.g., '/Game/Blueprints/MyBP.MyBP'
+        actor_name: Unique name for the new actor
+        location: Optional [X, Y, Z] spawn location
+        rotation: Optional [Pitch, Yaw, Roll] spawn rotation
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+    try:
+        params = {
+            "blueprint_path": blueprint_path,
+            "actor_name": actor_name
+        }
+        if location is not None:
+            params["location"] = location
+        if rotation is not None:
+            params["rotation"] = rotation
+        response = unreal.send_command("spawn_blueprint_actor", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"spawn_blueprint_actor error: {e}")
+        return {"success": False, "message": str(e)}
+
+@mcp.tool()
+def copy_actor(
+    source_name: str,
+    new_name: str,
+    location: List[float] = None,
+    rotation: List[float] = None,
+    offset: List[float] = None
+) -> Dict[str, Any]:
+    """Copy an existing actor in the level with all its properties.
+
+    Args:
+        source_name: Name of the actor to copy
+        new_name: Name for the new copied actor
+        location: Optional [X, Y, Z] location for the copy (overrides offset)
+        rotation: Optional [Pitch, Yaw, Roll] rotation for the copy
+        offset: Optional [X, Y, Z] offset from source location (default [500, 0, 0])
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+    try:
+        params = {
+            "source_name": source_name,
+            "new_name": new_name
+        }
+        if location is not None:
+            params["location"] = location
+        if rotation is not None:
+            params["rotation"] = rotation
+        if offset is not None:
+            params["offset"] = offset
+        response = unreal.send_command("copy_actor", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"copy_actor error: {e}")
+        return {"success": False, "message": str(e)}
+
+@mcp.tool()
+def get_asset_property(
+    asset_path: str,
+    property: str
+) -> Dict[str, Any]:
+    """Read a property from any UObject asset (Data Assets, etc.).
+
+    Args:
+        asset_path: Full path to asset, e.g., '/Game/Data/MyDataAsset.MyDataAsset'
+        property: Property name to read
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+    try:
+        params = {
+            "asset_path": asset_path,
+            "property": property
+        }
+        response = unreal.send_command("get_asset_property", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"get_asset_property error: {e}")
+        return {"success": False, "message": str(e)}
+
+@mcp.tool()
+def set_asset_property(
+    asset_path: str,
+    property: str,
+    value: Any
+) -> Dict[str, Any]:
+    """Modify a property on any UObject asset (Data Assets, etc.).
+
+    Args:
+        asset_path: Full path to asset, e.g., '/Game/Data/MyDataAsset.MyDataAsset'
+        property: Property name to modify
+        value: New value for the property
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+    try:
+        params = {
+            "asset_path": asset_path,
+            "property": property,
+            "value": value
+        }
+        response = unreal.send_command("set_asset_property", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"set_asset_property error: {e}")
+        return {"success": False, "message": str(e)}
+
+@mcp.tool()
+def get_blueprint_default_property(
+    blueprint_path: str,
+    property: str
+) -> Dict[str, Any]:
+    """Read a default property from a Blueprint's Class Default Object (CDO).
+
+    Args:
+        blueprint_path: Full path to Blueprint, e.g., '/Game/Blueprints/MyBP.MyBP'
+        property: Property name to read from CDO
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+    try:
+        params = {
+            "blueprint_path": blueprint_path,
+            "property": property
+        }
+        response = unreal.send_command("get_blueprint_default_property", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"get_blueprint_default_property error: {e}")
+        return {"success": False, "message": str(e)}
+
+@mcp.tool()
+def set_blueprint_default_property(
+    blueprint_path: str,
+    property: str,
+    value: Any
+) -> Dict[str, Any]:
+    """Modify a default property on a Blueprint's CDO and recompile.
+
+    This changes the default value that new instances of this Blueprint will have.
+    The Blueprint will be recompiled after the change.
+
+    Args:
+        blueprint_path: Full path to Blueprint, e.g., '/Game/Blueprints/MyBP.MyBP'
+        property: Property name to modify on CDO
+        value: New default value
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+    try:
+        params = {
+            "blueprint_path": blueprint_path,
+            "property": property,
+            "value": value
+        }
+        response = unreal.send_command("set_blueprint_default_property", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"set_blueprint_default_property error: {e}")
+        return {"success": False, "message": str(e)}
+
 # Essential Blueprint Tools for Physics Actors
 @mcp.tool()
 def create_blueprint(name: str, parent_class: str) -> Dict[str, Any]:

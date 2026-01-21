@@ -66,6 +66,36 @@ private:
 	// RUNTIME Operations
 	TSharedPtr<FJsonObject> HandleShowWidget(const TSharedPtr<FJsonObject>& Params);
 
+	// ============================================================================
+	// Actor Property Commands
+	// ============================================================================
+	TSharedPtr<FJsonObject> HandleGetActorProperty(const TSharedPtr<FJsonObject>& Params);
+	TSharedPtr<FJsonObject> HandleSetActorProperty(const TSharedPtr<FJsonObject>& Params);
+
+	// ============================================================================
+	// Blueprint Actor Commands
+	// ============================================================================
+	TSharedPtr<FJsonObject> HandleSpawnBlueprintActor(const TSharedPtr<FJsonObject>& Params);
+	TSharedPtr<FJsonObject> HandleCopyActor(const TSharedPtr<FJsonObject>& Params);
+
+	// ============================================================================
+	// Asset Property Commands
+	// ============================================================================
+	TSharedPtr<FJsonObject> HandleGetAssetProperty(const TSharedPtr<FJsonObject>& Params);
+	TSharedPtr<FJsonObject> HandleSetAssetProperty(const TSharedPtr<FJsonObject>& Params);
+
+	// ============================================================================
+	// Blueprint Default Property Commands
+	// ============================================================================
+	TSharedPtr<FJsonObject> HandleGetBlueprintDefaultProperty(const TSharedPtr<FJsonObject>& Params);
+	TSharedPtr<FJsonObject> HandleSetBlueprintDefaultProperty(const TSharedPtr<FJsonObject>& Params);
+
+	// Actor Property Helpers
+	AActor* FindActorByName(const FString& ActorName);
+	TSharedPtr<FJsonValue> PropertyToJsonValue(UProperty* Property, const void* ValuePtr);
+	bool JsonValueToProperty(const TSharedPtr<FJsonValue>& JsonValue, UProperty* Property, void* ValuePtr);
+	FString GetPropertyTypeName(UProperty* Property);
+
 	// Widget Blueprint Helpers
 	UWidgetBlueprint* LoadWidgetBlueprint(const FString& AssetPath);
 	UWidget* FindWidgetByName(UWidgetBlueprint* WidgetBP, const FString& WidgetName);

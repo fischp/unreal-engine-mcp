@@ -1,5 +1,8 @@
 #include "Commands/EpicUnrealMCPEditorCommands.h"
 #include "Editor.h"
+#include "UObject/UnrealType.h"
+#include "UObject/PropertyPortFlags.h"
+#include "UObject/TextProperty.h"
 #include "LevelEditorViewport.h"
 #include "EditorViewportClient.h"
 #include "HighResScreenshot.h"
@@ -162,6 +165,42 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleCommand(const FStrin
 	else if (CommandType == TEXT("show_widget"))
 	{
 		return HandleShowWidget(Params);
+	}
+	// Actor Property commands
+	else if (CommandType == TEXT("get_actor_property"))
+	{
+		return HandleGetActorProperty(Params);
+	}
+	else if (CommandType == TEXT("set_actor_property"))
+	{
+		return HandleSetActorProperty(Params);
+	}
+	// Blueprint Actor commands
+	else if (CommandType == TEXT("spawn_blueprint_actor"))
+	{
+		return HandleSpawnBlueprintActor(Params);
+	}
+	else if (CommandType == TEXT("copy_actor"))
+	{
+		return HandleCopyActor(Params);
+	}
+	// Asset Property commands
+	else if (CommandType == TEXT("get_asset_property"))
+	{
+		return HandleGetAssetProperty(Params);
+	}
+	else if (CommandType == TEXT("set_asset_property"))
+	{
+		return HandleSetAssetProperty(Params);
+	}
+	// Blueprint Default Property commands
+	else if (CommandType == TEXT("get_blueprint_default_property"))
+	{
+		return HandleGetBlueprintDefaultProperty(Params);
+	}
+	else if (CommandType == TEXT("set_blueprint_default_property"))
+	{
+		return HandleSetBlueprintDefaultProperty(Params);
 	}
 
 	return CreateErrorResponse(FString::Printf(TEXT("Unknown editor command: %s"), *CommandType));
@@ -1583,7 +1622,8 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleShowWidget(const TSh
 	}
 
 	// Create widget and add to viewport
-	TSubclassOf<UUserWidget> WidgetClass = WidgetBP->GeneratedClass;
+	// Cast GeneratedClass to the correct type for CreateWidget
+	TSubclassOf<UUserWidget> WidgetClass = *WidgetBP->GeneratedClass;
 	UUserWidget* Widget = CreateWidget<UUserWidget>(PC, WidgetClass);
 	if (!Widget)
 	{
@@ -1598,4 +1638,1037 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleShowWidget(const TSh
 	Result->SetStringField(TEXT("blueprint_path"), BlueprintPath);
 	Result->SetNumberField(TEXT("z_order"), ZOrder);
 	return Result;
+}
+
+// ============================================================================
+// Actor Property Commands
+// ============================================================================
+
+AActor* FEpicUnrealMCPEditorCommands::FindActorByName(const FString& ActorName)
+{
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World) return nullptr;
+
+	TArray<AActor*> AllActors;
+	UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), AllActors);
+
+	for (AActor* Actor : AllActors)
+	{
+		if (Actor && Actor->GetName() == ActorName)
+		{
+			return Actor;
+		}
+	}
+	return nullptr;
+}
+
+FString FEpicUnrealMCPEditorCommands::GetPropertyTypeName(UProperty* Property)
+{
+	if (!Property) return TEXT("Unknown");
+
+	if (Cast<UBoolProperty>(Property)) return TEXT("Bool");
+	if (UByteProperty* ByteProp = Cast<UByteProperty>(Property))
+	{
+		return ByteProp->Enum ? FString::Printf(TEXT("Enum:%s"), *ByteProp->Enum->GetName()) : TEXT("Byte");
+	}
+	if (Cast<UIntProperty>(Property)) return TEXT("Int");
+	if (Cast<UInt64Property>(Property)) return TEXT("Int64");
+	if (Cast<UFloatProperty>(Property)) return TEXT("Float");
+	if (Cast<UDoubleProperty>(Property)) return TEXT("Double");
+	if (Cast<UStrProperty>(Property)) return TEXT("String");
+	if (Cast<UNameProperty>(Property)) return TEXT("Name");
+	if (Cast<UTextProperty>(Property)) return TEXT("Text");
+	if (UStructProperty* StructProp = Cast<UStructProperty>(Property))
+	{
+		return FString::Printf(TEXT("Struct:%s"), *StructProp->Struct->GetName());
+	}
+	if (UEnumProperty* EnumProp = Cast<UEnumProperty>(Property))
+	{
+		return FString::Printf(TEXT("Enum:%s"), *EnumProp->GetEnum()->GetName());
+	}
+	if (UObjectProperty* ObjProp = Cast<UObjectProperty>(Property))
+	{
+		return FString::Printf(TEXT("Object:%s"), *ObjProp->PropertyClass->GetName());
+	}
+	if (UClassProperty* ClassProp = Cast<UClassProperty>(Property))
+	{
+		return FString::Printf(TEXT("Class:%s"), *ClassProp->MetaClass->GetName());
+	}
+	if (Cast<UArrayProperty>(Property)) return TEXT("Array");
+	if (Cast<UMapProperty>(Property)) return TEXT("Map");
+	if (Cast<USetProperty>(Property)) return TEXT("Set");
+
+	return Property->GetClass()->GetName();
+}
+
+TSharedPtr<FJsonValue> FEpicUnrealMCPEditorCommands::PropertyToJsonValue(UProperty* Property, const void* ValuePtr)
+{
+	if (!Property || !ValuePtr)
+	{
+		return MakeShared<FJsonValueNull>();
+	}
+
+	// Boolean
+	if (UBoolProperty* BoolProp = Cast<UBoolProperty>(Property))
+	{
+		return MakeShared<FJsonValueBoolean>(BoolProp->GetPropertyValue(ValuePtr));
+	}
+
+	// Integer types
+	if (UByteProperty* ByteProp = Cast<UByteProperty>(Property))
+	{
+		if (ByteProp->Enum)
+		{
+			uint8 Value = ByteProp->GetPropertyValue(ValuePtr);
+			FString EnumName = ByteProp->Enum->GetNameStringByIndex(Value);
+			return MakeShared<FJsonValueString>(EnumName);
+		}
+		return MakeShared<FJsonValueNumber>(ByteProp->GetPropertyValue(ValuePtr));
+	}
+	if (UIntProperty* IntProp = Cast<UIntProperty>(Property))
+	{
+		return MakeShared<FJsonValueNumber>(IntProp->GetPropertyValue(ValuePtr));
+	}
+	if (UInt64Property* Int64Prop = Cast<UInt64Property>(Property))
+	{
+		return MakeShared<FJsonValueNumber>((double)Int64Prop->GetPropertyValue(ValuePtr));
+	}
+
+	// Float types
+	if (UFloatProperty* FloatProp = Cast<UFloatProperty>(Property))
+	{
+		return MakeShared<FJsonValueNumber>(FloatProp->GetPropertyValue(ValuePtr));
+	}
+	if (UDoubleProperty* DoubleProp = Cast<UDoubleProperty>(Property))
+	{
+		return MakeShared<FJsonValueNumber>(DoubleProp->GetPropertyValue(ValuePtr));
+	}
+
+	// String types
+	if (UStrProperty* StrProp = Cast<UStrProperty>(Property))
+	{
+		return MakeShared<FJsonValueString>(StrProp->GetPropertyValue(ValuePtr));
+	}
+	if (UNameProperty* NameProp = Cast<UNameProperty>(Property))
+	{
+		return MakeShared<FJsonValueString>(NameProp->GetPropertyValue(ValuePtr).ToString());
+	}
+	if (UTextProperty* TextProp = Cast<UTextProperty>(Property))
+	{
+		return MakeShared<FJsonValueString>(TextProp->GetPropertyValue(ValuePtr).ToString());
+	}
+
+	// Struct types (Vector, Rotator, Transform, Color, LinearColor)
+	if (UStructProperty* StructProp = Cast<UStructProperty>(Property))
+	{
+		UScriptStruct* Struct = StructProp->Struct;
+
+		if (Struct == TBaseStructure<FVector>::Get())
+		{
+			const FVector* Vec = static_cast<const FVector*>(ValuePtr);
+			TArray<TSharedPtr<FJsonValue>> Arr;
+			Arr.Add(MakeShared<FJsonValueNumber>(Vec->X));
+			Arr.Add(MakeShared<FJsonValueNumber>(Vec->Y));
+			Arr.Add(MakeShared<FJsonValueNumber>(Vec->Z));
+			return MakeShared<FJsonValueArray>(Arr);
+		}
+		if (Struct == TBaseStructure<FRotator>::Get())
+		{
+			const FRotator* Rot = static_cast<const FRotator*>(ValuePtr);
+			TArray<TSharedPtr<FJsonValue>> Arr;
+			Arr.Add(MakeShared<FJsonValueNumber>(Rot->Pitch));
+			Arr.Add(MakeShared<FJsonValueNumber>(Rot->Yaw));
+			Arr.Add(MakeShared<FJsonValueNumber>(Rot->Roll));
+			return MakeShared<FJsonValueArray>(Arr);
+		}
+		if (Struct == TBaseStructure<FTransform>::Get())
+		{
+			const FTransform* Trans = static_cast<const FTransform*>(ValuePtr);
+			TSharedPtr<FJsonObject> TransObj = MakeShared<FJsonObject>();
+
+			TArray<TSharedPtr<FJsonValue>> LocArr;
+			LocArr.Add(MakeShared<FJsonValueNumber>(Trans->GetLocation().X));
+			LocArr.Add(MakeShared<FJsonValueNumber>(Trans->GetLocation().Y));
+			LocArr.Add(MakeShared<FJsonValueNumber>(Trans->GetLocation().Z));
+			TransObj->SetArrayField(TEXT("location"), LocArr);
+
+			FRotator Rot = Trans->GetRotation().Rotator();
+			TArray<TSharedPtr<FJsonValue>> RotArr;
+			RotArr.Add(MakeShared<FJsonValueNumber>(Rot.Pitch));
+			RotArr.Add(MakeShared<FJsonValueNumber>(Rot.Yaw));
+			RotArr.Add(MakeShared<FJsonValueNumber>(Rot.Roll));
+			TransObj->SetArrayField(TEXT("rotation"), RotArr);
+
+			TArray<TSharedPtr<FJsonValue>> ScaleArr;
+			ScaleArr.Add(MakeShared<FJsonValueNumber>(Trans->GetScale3D().X));
+			ScaleArr.Add(MakeShared<FJsonValueNumber>(Trans->GetScale3D().Y));
+			ScaleArr.Add(MakeShared<FJsonValueNumber>(Trans->GetScale3D().Z));
+			TransObj->SetArrayField(TEXT("scale"), ScaleArr);
+
+			return MakeShared<FJsonValueObject>(TransObj);
+		}
+		if (Struct == TBaseStructure<FLinearColor>::Get())
+		{
+			const FLinearColor* Color = static_cast<const FLinearColor*>(ValuePtr);
+			TArray<TSharedPtr<FJsonValue>> Arr;
+			Arr.Add(MakeShared<FJsonValueNumber>(Color->R));
+			Arr.Add(MakeShared<FJsonValueNumber>(Color->G));
+			Arr.Add(MakeShared<FJsonValueNumber>(Color->B));
+			Arr.Add(MakeShared<FJsonValueNumber>(Color->A));
+			return MakeShared<FJsonValueArray>(Arr);
+		}
+		if (Struct == TBaseStructure<FColor>::Get())
+		{
+			const FColor* Color = static_cast<const FColor*>(ValuePtr);
+			TArray<TSharedPtr<FJsonValue>> Arr;
+			Arr.Add(MakeShared<FJsonValueNumber>(Color->R));
+			Arr.Add(MakeShared<FJsonValueNumber>(Color->G));
+			Arr.Add(MakeShared<FJsonValueNumber>(Color->B));
+			Arr.Add(MakeShared<FJsonValueNumber>(Color->A));
+			return MakeShared<FJsonValueArray>(Arr);
+		}
+		if (Struct == TBaseStructure<FVector2D>::Get())
+		{
+			const FVector2D* Vec = static_cast<const FVector2D*>(ValuePtr);
+			TArray<TSharedPtr<FJsonValue>> Arr;
+			Arr.Add(MakeShared<FJsonValueNumber>(Vec->X));
+			Arr.Add(MakeShared<FJsonValueNumber>(Vec->Y));
+			return MakeShared<FJsonValueArray>(Arr);
+		}
+
+		// Generic struct - export as string
+		FString StructStr;
+		Property->ExportTextItem(StructStr, ValuePtr, nullptr, nullptr, PPF_None);
+		return MakeShared<FJsonValueString>(StructStr);
+	}
+
+	// Enum
+	if (UEnumProperty* EnumProp = Cast<UEnumProperty>(Property))
+	{
+		UEnum* Enum = EnumProp->GetEnum();
+		UNumericProperty* UnderlyingProp = EnumProp->GetUnderlyingProperty();
+		int64 Value = UnderlyingProp->GetSignedIntPropertyValue(ValuePtr);
+		FString EnumName = Enum->GetNameStringByValue(Value);
+		return MakeShared<FJsonValueString>(EnumName);
+	}
+
+	// Object reference
+	if (UObjectProperty* ObjProp = Cast<UObjectProperty>(Property))
+	{
+		UObject* Obj = ObjProp->GetObjectPropertyValue(ValuePtr);
+		if (Obj)
+		{
+			return MakeShared<FJsonValueString>(Obj->GetPathName());
+		}
+		return MakeShared<FJsonValueNull>();
+	}
+
+	// Class reference
+	if (UClassProperty* ClassProp = Cast<UClassProperty>(Property))
+	{
+		UClass* Class = Cast<UClass>(ClassProp->GetObjectPropertyValue(ValuePtr));
+		if (Class)
+		{
+			return MakeShared<FJsonValueString>(Class->GetPathName());
+		}
+		return MakeShared<FJsonValueNull>();
+	}
+
+	// Fallback: export as text
+	FString ExportedText;
+	Property->ExportTextItem(ExportedText, ValuePtr, nullptr, nullptr, PPF_None);
+	return MakeShared<FJsonValueString>(ExportedText);
+}
+
+bool FEpicUnrealMCPEditorCommands::JsonValueToProperty(const TSharedPtr<FJsonValue>& JsonValue, UProperty* Property, void* ValuePtr)
+{
+	if (!JsonValue.IsValid() || !Property || !ValuePtr)
+	{
+		return false;
+	}
+
+	// Boolean
+	if (UBoolProperty* BoolProp = Cast<UBoolProperty>(Property))
+	{
+		bool BoolVal;
+		if (JsonValue->TryGetBool(BoolVal))
+		{
+			BoolProp->SetPropertyValue(ValuePtr, BoolVal);
+			return true;
+		}
+		return false;
+	}
+
+	// Numeric types
+	if (UByteProperty* ByteProp = Cast<UByteProperty>(Property))
+	{
+		if (!ByteProp->Enum)  // Regular byte, not enum
+		{
+			double NumVal;
+			if (JsonValue->TryGetNumber(NumVal))
+			{
+				ByteProp->SetPropertyValue(ValuePtr, static_cast<uint8>(NumVal));
+				return true;
+			}
+		}
+		else  // Byte enum
+		{
+			FString EnumStr;
+			if (JsonValue->TryGetString(EnumStr))
+			{
+				int32 EnumValue = ByteProp->Enum->GetIndexByNameString(EnumStr);
+				if (EnumValue != INDEX_NONE)
+				{
+					ByteProp->SetPropertyValue(ValuePtr, static_cast<uint8>(EnumValue));
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+	if (UIntProperty* IntProp = Cast<UIntProperty>(Property))
+	{
+		double NumVal;
+		if (JsonValue->TryGetNumber(NumVal))
+		{
+			IntProp->SetPropertyValue(ValuePtr, static_cast<int32>(NumVal));
+			return true;
+		}
+		return false;
+	}
+	if (UInt64Property* Int64Prop = Cast<UInt64Property>(Property))
+	{
+		double NumVal;
+		if (JsonValue->TryGetNumber(NumVal))
+		{
+			Int64Prop->SetPropertyValue(ValuePtr, static_cast<int64>(NumVal));
+			return true;
+		}
+		return false;
+	}
+	if (UFloatProperty* FloatProp = Cast<UFloatProperty>(Property))
+	{
+		double NumVal;
+		if (JsonValue->TryGetNumber(NumVal))
+		{
+			FloatProp->SetPropertyValue(ValuePtr, static_cast<float>(NumVal));
+			return true;
+		}
+		return false;
+	}
+	if (UDoubleProperty* DoubleProp = Cast<UDoubleProperty>(Property))
+	{
+		double NumVal;
+		if (JsonValue->TryGetNumber(NumVal))
+		{
+			DoubleProp->SetPropertyValue(ValuePtr, NumVal);
+			return true;
+		}
+		return false;
+	}
+
+	// String types
+	if (UStrProperty* StrProp = Cast<UStrProperty>(Property))
+	{
+		FString StrVal;
+		if (JsonValue->TryGetString(StrVal))
+		{
+			StrProp->SetPropertyValue(ValuePtr, StrVal);
+			return true;
+		}
+		return false;
+	}
+	if (UNameProperty* NameProp = Cast<UNameProperty>(Property))
+	{
+		FString StrVal;
+		if (JsonValue->TryGetString(StrVal))
+		{
+			NameProp->SetPropertyValue(ValuePtr, FName(*StrVal));
+			return true;
+		}
+		return false;
+	}
+	if (UTextProperty* TextProp = Cast<UTextProperty>(Property))
+	{
+		FString StrVal;
+		if (JsonValue->TryGetString(StrVal))
+		{
+			TextProp->SetPropertyValue(ValuePtr, FText::FromString(StrVal));
+			return true;
+		}
+		return false;
+	}
+
+	// Struct types
+	if (UStructProperty* StructProp = Cast<UStructProperty>(Property))
+	{
+		UScriptStruct* Struct = StructProp->Struct;
+
+		if (Struct == TBaseStructure<FVector>::Get())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Arr;
+			if (JsonValue->TryGetArray(Arr) && Arr->Num() >= 3)
+			{
+				FVector* Vec = static_cast<FVector*>(ValuePtr);
+				Vec->X = (*Arr)[0]->AsNumber();
+				Vec->Y = (*Arr)[1]->AsNumber();
+				Vec->Z = (*Arr)[2]->AsNumber();
+				return true;
+			}
+			return false;
+		}
+		if (Struct == TBaseStructure<FRotator>::Get())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Arr;
+			if (JsonValue->TryGetArray(Arr) && Arr->Num() >= 3)
+			{
+				FRotator* Rot = static_cast<FRotator*>(ValuePtr);
+				Rot->Pitch = (*Arr)[0]->AsNumber();
+				Rot->Yaw = (*Arr)[1]->AsNumber();
+				Rot->Roll = (*Arr)[2]->AsNumber();
+				return true;
+			}
+			return false;
+		}
+		if (Struct == TBaseStructure<FTransform>::Get())
+		{
+			const TSharedPtr<FJsonObject>* TransObj;
+			if (JsonValue->TryGetObject(TransObj))
+			{
+				FTransform* Trans = static_cast<FTransform*>(ValuePtr);
+
+				const TArray<TSharedPtr<FJsonValue>>* LocArr;
+				if ((*TransObj)->TryGetArrayField(TEXT("location"), LocArr) && LocArr->Num() >= 3)
+				{
+					Trans->SetLocation(FVector(
+						(*LocArr)[0]->AsNumber(),
+						(*LocArr)[1]->AsNumber(),
+						(*LocArr)[2]->AsNumber()
+					));
+				}
+
+				const TArray<TSharedPtr<FJsonValue>>* RotArr;
+				if ((*TransObj)->TryGetArrayField(TEXT("rotation"), RotArr) && RotArr->Num() >= 3)
+				{
+					Trans->SetRotation(FQuat(FRotator(
+						(*RotArr)[0]->AsNumber(),
+						(*RotArr)[1]->AsNumber(),
+						(*RotArr)[2]->AsNumber()
+					)));
+				}
+
+				const TArray<TSharedPtr<FJsonValue>>* ScaleArr;
+				if ((*TransObj)->TryGetArrayField(TEXT("scale"), ScaleArr) && ScaleArr->Num() >= 3)
+				{
+					Trans->SetScale3D(FVector(
+						(*ScaleArr)[0]->AsNumber(),
+						(*ScaleArr)[1]->AsNumber(),
+						(*ScaleArr)[2]->AsNumber()
+					));
+				}
+				return true;
+			}
+			return false;
+		}
+		if (Struct == TBaseStructure<FLinearColor>::Get())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Arr;
+			if (JsonValue->TryGetArray(Arr) && Arr->Num() >= 3)
+			{
+				FLinearColor* Color = static_cast<FLinearColor*>(ValuePtr);
+				Color->R = (*Arr)[0]->AsNumber();
+				Color->G = (*Arr)[1]->AsNumber();
+				Color->B = (*Arr)[2]->AsNumber();
+				Color->A = Arr->Num() >= 4 ? (*Arr)[3]->AsNumber() : 1.0f;
+				return true;
+			}
+			return false;
+		}
+		if (Struct == TBaseStructure<FColor>::Get())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Arr;
+			if (JsonValue->TryGetArray(Arr) && Arr->Num() >= 3)
+			{
+				FColor* Color = static_cast<FColor*>(ValuePtr);
+				Color->R = static_cast<uint8>((*Arr)[0]->AsNumber());
+				Color->G = static_cast<uint8>((*Arr)[1]->AsNumber());
+				Color->B = static_cast<uint8>((*Arr)[2]->AsNumber());
+				Color->A = Arr->Num() >= 4 ? static_cast<uint8>((*Arr)[3]->AsNumber()) : 255;
+				return true;
+			}
+			return false;
+		}
+		if (Struct == TBaseStructure<FVector2D>::Get())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Arr;
+			if (JsonValue->TryGetArray(Arr) && Arr->Num() >= 2)
+			{
+				FVector2D* Vec = static_cast<FVector2D*>(ValuePtr);
+				Vec->X = (*Arr)[0]->AsNumber();
+				Vec->Y = (*Arr)[1]->AsNumber();
+				return true;
+			}
+			return false;
+		}
+
+		// Generic struct - import from text
+		FString StrVal;
+		if (JsonValue->TryGetString(StrVal))
+		{
+			const TCHAR* Buffer = *StrVal;
+			Property->ImportText(Buffer, ValuePtr, PPF_None, nullptr);
+			return true;
+		}
+		return false;
+	}
+
+	// Enum property
+	if (UEnumProperty* EnumProp = Cast<UEnumProperty>(Property))
+	{
+		FString EnumStr;
+		if (JsonValue->TryGetString(EnumStr))
+		{
+			UEnum* Enum = EnumProp->GetEnum();
+			int64 EnumValue = Enum->GetValueByNameString(EnumStr);
+			if (EnumValue != INDEX_NONE)
+			{
+				EnumProp->GetUnderlyingProperty()->SetIntPropertyValue(ValuePtr, EnumValue);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// Object reference (by path)
+	if (UObjectProperty* ObjProp = Cast<UObjectProperty>(Property))
+	{
+		FString PathStr;
+		if (JsonValue->TryGetString(PathStr))
+		{
+			UObject* LoadedObj = StaticLoadObject(ObjProp->PropertyClass, nullptr, *PathStr);
+			ObjProp->SetObjectPropertyValue(ValuePtr, LoadedObj);
+			return true;
+		}
+		return false;
+	}
+
+	return false;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleGetActorProperty(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ActorName;
+	if (!Params->TryGetStringField(TEXT("name"), ActorName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'name' parameter"));
+	}
+
+	FString PropertyName;
+	if (!Params->TryGetStringField(TEXT("property"), PropertyName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'property' parameter"));
+	}
+
+	AActor* Actor = FindActorByName(ActorName);
+	if (!Actor)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Actor not found: %s"), *ActorName));
+	}
+
+	// Find the property on the actor's class
+	UProperty* Property = Actor->GetClass()->FindPropertyByName(*PropertyName);
+	if (!Property)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Property not found: %s"), *PropertyName));
+	}
+
+	// Get the value pointer
+	const void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Actor);
+	if (!ValuePtr)
+	{
+		return CreateErrorResponse(TEXT("Failed to get property value pointer"));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("actor"), ActorName);
+	Result->SetStringField(TEXT("property"), PropertyName);
+	Result->SetStringField(TEXT("type"), GetPropertyTypeName(Property));
+	Result->SetField(TEXT("value"), PropertyToJsonValue(Property, ValuePtr));
+
+	return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSetActorProperty(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ActorName;
+	if (!Params->TryGetStringField(TEXT("name"), ActorName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'name' parameter"));
+	}
+
+	FString PropertyName;
+	if (!Params->TryGetStringField(TEXT("property"), PropertyName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'property' parameter"));
+	}
+
+	if (!Params->HasField(TEXT("value")))
+	{
+		return CreateErrorResponse(TEXT("Missing 'value' parameter"));
+	}
+
+	AActor* Actor = FindActorByName(ActorName);
+	if (!Actor)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Actor not found: %s"), *ActorName));
+	}
+
+	// Find the property on the actor's class
+	UProperty* Property = Actor->GetClass()->FindPropertyByName(*PropertyName);
+	if (!Property)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Property not found: %s"), *PropertyName));
+	}
+
+	// Check if property is editable
+	if (Property->HasAnyPropertyFlags(CPF_EditConst))
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Property is read-only: %s"), *PropertyName));
+	}
+
+	// Get the value pointer
+	void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Actor);
+	if (!ValuePtr)
+	{
+		return CreateErrorResponse(TEXT("Failed to get property value pointer"));
+	}
+
+	// Get the JSON value
+	TSharedPtr<FJsonValue> JsonValue = Params->TryGetField(TEXT("value"));
+
+	// Convert and set the value
+	if (!JsonValueToProperty(JsonValue, Property, ValuePtr))
+	{
+		return CreateErrorResponse(FString::Printf(
+			TEXT("Failed to set property value. Property type: %s"),
+			*GetPropertyTypeName(Property)
+		));
+	}
+
+	// Mark actor as modified for editor undo/save
+	Actor->Modify();
+	Actor->MarkPackageDirty();
+
+	// Notify about property change
+	Actor->PostEditChange();
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("actor"), ActorName);
+	Result->SetStringField(TEXT("property"), PropertyName);
+	Result->SetStringField(TEXT("type"), GetPropertyTypeName(Property));
+	Result->SetField(TEXT("value"), PropertyToJsonValue(Property, ValuePtr));
+
+	return Result;
+}
+
+// ============================================================================
+// Blueprint Actor Commands
+// ============================================================================
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSpawnBlueprintActor(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintPath;
+	if (!Params->TryGetStringField(TEXT("blueprint_path"), BlueprintPath))
+	{
+		return CreateErrorResponse(TEXT("Missing 'blueprint_path' parameter"));
+	}
+
+	FString ActorName;
+	if (!Params->TryGetStringField(TEXT("actor_name"), ActorName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'actor_name' parameter"));
+	}
+
+	FVector Location = GetVectorFromJson(Params, TEXT("location"));
+	FRotator Rotation = GetRotatorFromJson(Params, TEXT("rotation"));
+	FVector Scale(1, 1, 1);
+	if (Params->HasField(TEXT("scale")))
+	{
+		Scale = GetVectorFromJson(Params, TEXT("scale"));
+	}
+
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World)
+	{
+		return CreateErrorResponse(TEXT("No editor world available"));
+	}
+
+	// Load the Blueprint class (append _C if not present)
+	FString ClassPath = BlueprintPath;
+	if (!ClassPath.EndsWith(TEXT("_C")))
+	{
+		ClassPath += TEXT("_C");
+	}
+
+	UClass* ActorClass = LoadClass<AActor>(nullptr, *ClassPath);
+	if (!ActorClass)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Failed to load Blueprint class: %s"), *ClassPath));
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Name = FName(*ActorName);
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AActor* NewActor = World->SpawnActor<AActor>(ActorClass, Location, Rotation, SpawnParams);
+	if (!NewActor)
+	{
+		return CreateErrorResponse(TEXT("Failed to spawn Blueprint actor"));
+	}
+
+	NewActor->SetActorScale3D(Scale);
+	NewActor->MarkPackageDirty();
+
+	return ActorToJsonObject(NewActor, true);
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleCopyActor(const TSharedPtr<FJsonObject>& Params)
+{
+	FString SourceName;
+	if (!Params->TryGetStringField(TEXT("source_name"), SourceName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'source_name' parameter"));
+	}
+
+	FString NewName;
+	if (!Params->TryGetStringField(TEXT("new_name"), NewName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'new_name' parameter"));
+	}
+
+	AActor* SourceActor = FindActorByName(SourceName);
+	if (!SourceActor)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Source actor not found: %s"), *SourceName));
+	}
+
+	UWorld* World = SourceActor->GetWorld();
+	if (!World)
+	{
+		return CreateErrorResponse(TEXT("No world available"));
+	}
+
+	// Determine spawn location
+	FVector SpawnLocation = SourceActor->GetActorLocation();
+	FRotator SpawnRotation = SourceActor->GetActorRotation();
+
+	if (Params->HasField(TEXT("location")))
+	{
+		SpawnLocation = GetVectorFromJson(Params, TEXT("location"));
+	}
+	else if (Params->HasField(TEXT("offset")))
+	{
+		SpawnLocation += GetVectorFromJson(Params, TEXT("offset"));
+	}
+	else
+	{
+		SpawnLocation += FVector(500, 0, 0); // Default offset
+	}
+
+	if (Params->HasField(TEXT("rotation")))
+	{
+		SpawnRotation = GetRotatorFromJson(Params, TEXT("rotation"));
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Name = FName(*NewName);
+	SpawnParams.Template = SourceActor; // Copy all properties from source
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AActor* NewActor = World->SpawnActor<AActor>(
+		SourceActor->GetClass(),
+		SpawnLocation,
+		SpawnRotation,
+		SpawnParams
+	);
+
+	if (!NewActor)
+	{
+		return CreateErrorResponse(TEXT("Failed to copy actor"));
+	}
+
+	NewActor->SetActorScale3D(SourceActor->GetActorScale3D());
+	NewActor->MarkPackageDirty();
+
+	return ActorToJsonObject(NewActor, true);
+}
+
+// ============================================================================
+// Asset Property Commands
+// ============================================================================
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleGetAssetProperty(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return CreateErrorResponse(TEXT("Missing 'asset_path' parameter"));
+	}
+
+	FString PropertyName;
+	if (!Params->TryGetStringField(TEXT("property"), PropertyName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'property' parameter"));
+	}
+
+	// Load the asset
+	UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
+	if (!Asset)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Failed to load asset: %s"), *AssetPath));
+	}
+
+	// Find the property
+	UProperty* Property = Asset->GetClass()->FindPropertyByName(*PropertyName);
+	if (!Property)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Property not found: %s"), *PropertyName));
+	}
+
+	// Get value pointer
+	void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Asset);
+	if (!ValuePtr)
+	{
+		return CreateErrorResponse(TEXT("Failed to get property value pointer"));
+	}
+
+	// Build response
+	TSharedPtr<FJsonObject> Response = MakeShareable(new FJsonObject());
+	Response->SetBoolField(TEXT("success"), true);
+	Response->SetStringField(TEXT("asset"), AssetPath);
+	Response->SetStringField(TEXT("property"), PropertyName);
+	Response->SetStringField(TEXT("type"), GetPropertyTypeName(Property));
+	Response->SetField(TEXT("value"), PropertyToJsonValue(Property, ValuePtr));
+
+	return Response;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSetAssetProperty(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return CreateErrorResponse(TEXT("Missing 'asset_path' parameter"));
+	}
+
+	FString PropertyName;
+	if (!Params->TryGetStringField(TEXT("property"), PropertyName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'property' parameter"));
+	}
+
+	if (!Params->HasField(TEXT("value")))
+	{
+		return CreateErrorResponse(TEXT("Missing 'value' parameter"));
+	}
+
+	// Load the asset
+	UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
+	if (!Asset)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Failed to load asset: %s"), *AssetPath));
+	}
+
+	// Find the property
+	UProperty* Property = Asset->GetClass()->FindPropertyByName(*PropertyName);
+	if (!Property)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Property not found: %s"), *PropertyName));
+	}
+
+	// Check if editable
+	if (Property->HasAnyPropertyFlags(CPF_EditConst))
+	{
+		return CreateErrorResponse(TEXT("Property is read-only"));
+	}
+
+	// Get value pointer
+	void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Asset);
+	if (!ValuePtr)
+	{
+		return CreateErrorResponse(TEXT("Failed to get property value pointer"));
+	}
+
+	// Set the value using existing helper
+	TSharedPtr<FJsonValue> JsonValue = Params->TryGetField(TEXT("value"));
+	if (!JsonValueToProperty(JsonValue, Property, ValuePtr))
+	{
+		return CreateErrorResponse(TEXT("Failed to set property value"));
+	}
+
+	// Mark dirty (no compilation needed for Data Assets)
+	Asset->Modify();
+	Asset->MarkPackageDirty();
+
+	// Build response
+	TSharedPtr<FJsonObject> Response = MakeShareable(new FJsonObject());
+	Response->SetBoolField(TEXT("success"), true);
+	Response->SetStringField(TEXT("asset"), AssetPath);
+	Response->SetStringField(TEXT("property"), PropertyName);
+	Response->SetField(TEXT("new_value"), PropertyToJsonValue(Property, ValuePtr));
+
+	return Response;
+}
+
+// ============================================================================
+// Blueprint Default Property Commands
+// ============================================================================
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleGetBlueprintDefaultProperty(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintPath;
+	if (!Params->TryGetStringField(TEXT("blueprint_path"), BlueprintPath))
+	{
+		return CreateErrorResponse(TEXT("Missing 'blueprint_path' parameter"));
+	}
+
+	FString PropertyName;
+	if (!Params->TryGetStringField(TEXT("property"), PropertyName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'property' parameter"));
+	}
+
+	// Load the Blueprint class (append _C if not present)
+	FString ClassPath = BlueprintPath;
+	if (!ClassPath.EndsWith(TEXT("_C")))
+	{
+		ClassPath += TEXT("_C");
+	}
+
+	UClass* BPClass = LoadClass<UObject>(nullptr, *ClassPath);
+	if (!BPClass)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Failed to load Blueprint class: %s"), *ClassPath));
+	}
+
+	// Get the Class Default Object (CDO)
+	UObject* CDO = BPClass->GetDefaultObject();
+	if (!CDO)
+	{
+		return CreateErrorResponse(TEXT("Failed to get Class Default Object"));
+	}
+
+	// Find the property
+	UProperty* Property = BPClass->FindPropertyByName(*PropertyName);
+	if (!Property)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Property not found: %s"), *PropertyName));
+	}
+
+	// Get value pointer from CDO
+	void* ValuePtr = Property->ContainerPtrToValuePtr<void>(CDO);
+	if (!ValuePtr)
+	{
+		return CreateErrorResponse(TEXT("Failed to get property value pointer"));
+	}
+
+	// Build response
+	TSharedPtr<FJsonObject> Response = MakeShareable(new FJsonObject());
+	Response->SetBoolField(TEXT("success"), true);
+	Response->SetStringField(TEXT("blueprint"), BlueprintPath);
+	Response->SetStringField(TEXT("property"), PropertyName);
+	Response->SetStringField(TEXT("type"), GetPropertyTypeName(Property));
+	Response->SetField(TEXT("value"), PropertyToJsonValue(Property, ValuePtr));
+
+	return Response;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSetBlueprintDefaultProperty(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintPath;
+	if (!Params->TryGetStringField(TEXT("blueprint_path"), BlueprintPath))
+	{
+		return CreateErrorResponse(TEXT("Missing 'blueprint_path' parameter"));
+	}
+
+	FString PropertyName;
+	if (!Params->TryGetStringField(TEXT("property"), PropertyName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'property' parameter"));
+	}
+
+	if (!Params->HasField(TEXT("value")))
+	{
+		return CreateErrorResponse(TEXT("Missing 'value' parameter"));
+	}
+
+	// Load the Blueprint asset (not just the class)
+	FString BPAssetPath = BlueprintPath;
+	if (BPAssetPath.EndsWith(TEXT("_C")))
+	{
+		BPAssetPath = BPAssetPath.LeftChop(2);
+	}
+
+	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BPAssetPath);
+	if (!Blueprint)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Failed to load Blueprint: %s"), *BPAssetPath));
+	}
+
+	// Get the generated class
+	UClass* BPClass = Blueprint->GeneratedClass;
+	if (!BPClass)
+	{
+		return CreateErrorResponse(TEXT("Blueprint has no GeneratedClass - needs compilation"));
+	}
+
+	// Get the CDO
+	UObject* CDO = BPClass->GetDefaultObject();
+	if (!CDO)
+	{
+		return CreateErrorResponse(TEXT("Failed to get Class Default Object"));
+	}
+
+	// Find the property
+	UProperty* Property = BPClass->FindPropertyByName(*PropertyName);
+	if (!Property)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Property not found: %s"), *PropertyName));
+	}
+
+	// Check if editable
+	if (Property->HasAnyPropertyFlags(CPF_EditConst))
+	{
+		return CreateErrorResponse(TEXT("Property is read-only"));
+	}
+
+	// Get value pointer from CDO
+	void* ValuePtr = Property->ContainerPtrToValuePtr<void>(CDO);
+	if (!ValuePtr)
+	{
+		return CreateErrorResponse(TEXT("Failed to get property value pointer"));
+	}
+
+	// Set the value
+	TSharedPtr<FJsonValue> JsonValue = Params->TryGetField(TEXT("value"));
+	if (!JsonValueToProperty(JsonValue, Property, ValuePtr))
+	{
+		return CreateErrorResponse(TEXT("Failed to set property value"));
+	}
+
+	// Mark Blueprint dirty and recompile
+	Blueprint->Modify();
+	Blueprint->MarkPackageDirty();
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+
+	// Build response
+	TSharedPtr<FJsonObject> Response = MakeShareable(new FJsonObject());
+	Response->SetBoolField(TEXT("success"), true);
+	Response->SetStringField(TEXT("blueprint"), BlueprintPath);
+	Response->SetStringField(TEXT("property"), PropertyName);
+	Response->SetField(TEXT("new_value"), PropertyToJsonValue(Property, ValuePtr));
+
+	return Response;
 }
