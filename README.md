@@ -134,7 +134,7 @@ cd unreal-engine-mcp
 **Option B: Add Plugin to Your Existing Project**
 ```bash
 # Copy the plugin to your project
-cp -r UnrealMCP/ YourProject/Plugins/
+cp -r FlopperamUnrealMCP/Plugins/UnrealMCP/ YourProject/Plugins/
 
 # Enable in Unreal Editor
 Edit → Plugins → Search "UnrealMCP" → Enable → Restart Editor
@@ -143,7 +143,7 @@ Edit → Plugins → Search "UnrealMCP" → Enable → Restart Editor
 **Option C: Install for All Projects**
 ```bash
 # Copy to Engine plugins folder (available to all projects)
-cp -r UnrealMCP/ "C:/Program Files/Epic Games/UE_5.5/Engine/Plugins/"
+cp -r FlopperamUnrealMCP/Plugins/UnrealMCP/ "C:/Program Files/Epic Games/UE_5.5/Engine/Plugins/"
 
 # Enable in any project through the Plugin Browser
 Edit → Plugins → Search "UnrealMCP" → Enable
