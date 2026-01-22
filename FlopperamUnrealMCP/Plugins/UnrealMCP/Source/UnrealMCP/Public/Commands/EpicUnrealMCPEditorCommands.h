@@ -90,6 +90,19 @@ private:
 	TSharedPtr<FJsonObject> HandleGetBlueprintDefaultProperty(const TSharedPtr<FJsonObject>& Params);
 	TSharedPtr<FJsonObject> HandleSetBlueprintDefaultProperty(const TSharedPtr<FJsonObject>& Params);
 
+	// ============================================================================
+	// Data Table Commands
+	// ============================================================================
+	TSharedPtr<FJsonObject> HandleListDataTableRows(const TSharedPtr<FJsonObject>& Params);
+	TSharedPtr<FJsonObject> HandleGetDataTableRow(const TSharedPtr<FJsonObject>& Params);
+	TSharedPtr<FJsonObject> HandleSetDataTableRowField(const TSharedPtr<FJsonObject>& Params);
+	TSharedPtr<FJsonObject> HandleAddDataTableRow(const TSharedPtr<FJsonObject>& Params);
+	TSharedPtr<FJsonObject> HandleDeleteDataTableRow(const TSharedPtr<FJsonObject>& Params);
+
+	// Data Table Helpers
+	TSharedPtr<FJsonObject> RowStructToJson(UScriptStruct* RowStruct, const void* RowData);
+	bool JsonToRowStruct(const TSharedPtr<FJsonObject>& JsonObj, UScriptStruct* RowStruct, void* RowData);
+
 	// Actor Property Helpers
 	AActor* FindActorByName(const FString& ActorName);
 	TSharedPtr<FJsonValue> PropertyToJsonValue(UProperty* Property, const void* ValuePtr);

@@ -52,6 +52,7 @@
 #include "WidgetBlueprintFactory.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "ObjectTools.h"
+#include "Engine/DataTable.h"
 
 FEpicUnrealMCPEditorCommands::FEpicUnrealMCPEditorCommands()
 {
@@ -201,6 +202,27 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleCommand(const FStrin
 	else if (CommandType == TEXT("set_blueprint_default_property"))
 	{
 		return HandleSetBlueprintDefaultProperty(Params);
+	}
+	// Data Table commands
+	else if (CommandType == TEXT("list_data_table_rows"))
+	{
+		return HandleListDataTableRows(Params);
+	}
+	else if (CommandType == TEXT("get_data_table_row"))
+	{
+		return HandleGetDataTableRow(Params);
+	}
+	else if (CommandType == TEXT("set_data_table_row_field"))
+	{
+		return HandleSetDataTableRowField(Params);
+	}
+	else if (CommandType == TEXT("add_data_table_row"))
+	{
+		return HandleAddDataTableRow(Params);
+	}
+	else if (CommandType == TEXT("delete_data_table_row"))
+	{
+		return HandleDeleteDataTableRow(Params);
 	}
 
 	return CreateErrorResponse(FString::Printf(TEXT("Unknown editor command: %s"), *CommandType));
@@ -2671,4 +2693,336 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSetBlueprintDefaultP
 	Response->SetField(TEXT("new_value"), PropertyToJsonValue(Property, ValuePtr));
 
 	return Response;
+}
+
+// ============================================================================
+// Data Table Commands
+// ============================================================================
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::RowStructToJson(UScriptStruct* RowStruct, const void* RowData)
+{
+	TSharedPtr<FJsonObject> JsonObj = MakeShared<FJsonObject>();
+
+	if (!RowStruct || !RowData)
+	{
+		return JsonObj;
+	}
+
+	// Iterate all properties in the struct
+	for (TFieldIterator<UProperty> PropIt(RowStruct); PropIt; ++PropIt)
+	{
+		UProperty* Property = *PropIt;
+		FString PropName = Property->GetName();
+
+		const void* ValuePtr = Property->ContainerPtrToValuePtr<void>(RowData);
+
+		// Create field object with type and value
+		TSharedPtr<FJsonObject> FieldObj = MakeShared<FJsonObject>();
+		FieldObj->SetStringField(TEXT("type"), GetPropertyTypeName(Property));
+		FieldObj->SetField(TEXT("value"), PropertyToJsonValue(Property, ValuePtr));
+
+		JsonObj->SetObjectField(PropName, FieldObj);
+	}
+
+	return JsonObj;
+}
+
+bool FEpicUnrealMCPEditorCommands::JsonToRowStruct(const TSharedPtr<FJsonObject>& JsonObj, UScriptStruct* RowStruct, void* RowData)
+{
+	if (!JsonObj.IsValid() || !RowStruct || !RowData)
+	{
+		return false;
+	}
+
+	for (TFieldIterator<UProperty> PropIt(RowStruct); PropIt; ++PropIt)
+	{
+		UProperty* Property = *PropIt;
+		FString PropName = Property->GetName();
+
+		if (JsonObj->HasField(PropName))
+		{
+			TSharedPtr<FJsonValue> JsonValue;
+
+			// Support both {type, value} format and direct value
+			const TSharedPtr<FJsonObject>* FieldObj;
+			if (JsonObj->TryGetObjectField(PropName, FieldObj) && (*FieldObj)->HasField(TEXT("value")))
+			{
+				JsonValue = (*FieldObj)->TryGetField(TEXT("value"));
+			}
+			else
+			{
+				JsonValue = JsonObj->TryGetField(PropName);
+			}
+
+			void* ValuePtr = Property->ContainerPtrToValuePtr<void>(RowData);
+
+			if (!JsonValueToProperty(JsonValue, Property, ValuePtr))
+			{
+				UE_LOG(LogTemp, Warning, TEXT("Failed to set DataTable row property: %s"), *PropName);
+				// Continue with other properties
+			}
+		}
+	}
+	return true;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleListDataTableRows(const TSharedPtr<FJsonObject>& Params)
+{
+	FString DataTablePath;
+	if (!Params->TryGetStringField(TEXT("data_table_path"), DataTablePath))
+	{
+		return CreateErrorResponse(TEXT("Missing 'data_table_path' parameter"));
+	}
+
+	UDataTable* DataTable = LoadObject<UDataTable>(nullptr, *DataTablePath);
+	if (!DataTable)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Failed to load DataTable: %s"), *DataTablePath));
+	}
+
+	TArray<FName> RowNames = DataTable->GetRowNames();
+	TArray<TSharedPtr<FJsonValue>> RowNamesJson;
+
+	for (const FName& RowName : RowNames)
+	{
+		RowNamesJson.Add(MakeShared<FJsonValueString>(RowName.ToString()));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("data_table_path"), DataTablePath);
+	Result->SetStringField(TEXT("row_struct"), DataTable->GetRowStruct() ? DataTable->GetRowStruct()->GetName() : TEXT("Unknown"));
+	Result->SetArrayField(TEXT("row_names"), RowNamesJson);
+	Result->SetNumberField(TEXT("count"), RowNames.Num());
+
+	return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleGetDataTableRow(const TSharedPtr<FJsonObject>& Params)
+{
+	FString DataTablePath;
+	if (!Params->TryGetStringField(TEXT("data_table_path"), DataTablePath))
+	{
+		return CreateErrorResponse(TEXT("Missing 'data_table_path' parameter"));
+	}
+
+	FString RowName;
+	if (!Params->TryGetStringField(TEXT("row_name"), RowName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'row_name' parameter"));
+	}
+
+	UDataTable* DataTable = LoadObject<UDataTable>(nullptr, *DataTablePath);
+	if (!DataTable)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Failed to load DataTable: %s"), *DataTablePath));
+	}
+
+	UScriptStruct* RowStruct = DataTable->GetRowStruct();
+	if (!RowStruct)
+	{
+		return CreateErrorResponse(TEXT("DataTable has no row struct"));
+	}
+
+	void* RowData = DataTable->FindRowUnchecked(FName(*RowName));
+	if (!RowData)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Row not found: %s"), *RowName));
+	}
+
+	TSharedPtr<FJsonObject> RowJson = RowStructToJson(RowStruct, RowData);
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("data_table_path"), DataTablePath);
+	Result->SetStringField(TEXT("row_name"), RowName);
+	Result->SetStringField(TEXT("row_struct"), RowStruct->GetName());
+	Result->SetObjectField(TEXT("row_data"), RowJson);
+
+	return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSetDataTableRowField(const TSharedPtr<FJsonObject>& Params)
+{
+	FString DataTablePath;
+	if (!Params->TryGetStringField(TEXT("data_table_path"), DataTablePath))
+	{
+		return CreateErrorResponse(TEXT("Missing 'data_table_path' parameter"));
+	}
+
+	FString RowName;
+	if (!Params->TryGetStringField(TEXT("row_name"), RowName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'row_name' parameter"));
+	}
+
+	FString FieldName;
+	if (!Params->TryGetStringField(TEXT("field_name"), FieldName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'field_name' parameter"));
+	}
+
+	if (!Params->HasField(TEXT("value")))
+	{
+		return CreateErrorResponse(TEXT("Missing 'value' parameter"));
+	}
+
+	UDataTable* DataTable = LoadObject<UDataTable>(nullptr, *DataTablePath);
+	if (!DataTable)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Failed to load DataTable: %s"), *DataTablePath));
+	}
+
+	UScriptStruct* RowStruct = DataTable->GetRowStruct();
+	if (!RowStruct)
+	{
+		return CreateErrorResponse(TEXT("DataTable has no row struct"));
+	}
+
+	void* RowData = DataTable->FindRowUnchecked(FName(*RowName));
+	if (!RowData)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Row not found: %s"), *RowName));
+	}
+
+	// Find the property in the row struct
+	UProperty* Property = RowStruct->FindPropertyByName(FName(*FieldName));
+	if (!Property)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Field not found: %s"), *FieldName));
+	}
+
+	void* FieldPtr = Property->ContainerPtrToValuePtr<void>(RowData);
+	TSharedPtr<FJsonValue> JsonValue = Params->TryGetField(TEXT("value"));
+
+	if (!JsonValueToProperty(JsonValue, Property, FieldPtr))
+	{
+		return CreateErrorResponse(FString::Printf(
+			TEXT("Failed to set field value. Field type: %s"),
+			*GetPropertyTypeName(Property)
+		));
+	}
+
+	// Mark dirty and notify
+	DataTable->Modify();
+	DataTable->MarkPackageDirty();
+	DataTable->HandleDataTableChanged(FName(*RowName));
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("data_table_path"), DataTablePath);
+	Result->SetStringField(TEXT("row_name"), RowName);
+	Result->SetStringField(TEXT("field_name"), FieldName);
+	Result->SetStringField(TEXT("field_type"), GetPropertyTypeName(Property));
+	Result->SetField(TEXT("new_value"), PropertyToJsonValue(Property, FieldPtr));
+
+	return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleAddDataTableRow(const TSharedPtr<FJsonObject>& Params)
+{
+	FString DataTablePath;
+	if (!Params->TryGetStringField(TEXT("data_table_path"), DataTablePath))
+	{
+		return CreateErrorResponse(TEXT("Missing 'data_table_path' parameter"));
+	}
+
+	FString RowName;
+	if (!Params->TryGetStringField(TEXT("row_name"), RowName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'row_name' parameter"));
+	}
+
+	UDataTable* DataTable = LoadObject<UDataTable>(nullptr, *DataTablePath);
+	if (!DataTable)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Failed to load DataTable: %s"), *DataTablePath));
+	}
+
+	UScriptStruct* RowStruct = DataTable->GetRowStruct();
+	if (!RowStruct)
+	{
+		return CreateErrorResponse(TEXT("DataTable has no row struct"));
+	}
+
+	// Check if row already exists
+	if (DataTable->FindRowUnchecked(FName(*RowName)))
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Row already exists: %s"), *RowName));
+	}
+
+	// Allocate and initialize new row data
+	void* NewRowData = FMemory::Malloc(RowStruct->GetStructureSize());
+	RowStruct->InitializeStruct(NewRowData);
+
+	// If row_data provided, populate the fields
+	const TSharedPtr<FJsonObject>* RowDataJson;
+	if (Params->TryGetObjectField(TEXT("row_data"), RowDataJson))
+	{
+		if (!JsonToRowStruct(*RowDataJson, RowStruct, NewRowData))
+		{
+			RowStruct->DestroyStruct(NewRowData);
+			FMemory::Free(NewRowData);
+			return CreateErrorResponse(TEXT("Failed to parse row_data"));
+		}
+	}
+
+	// Add the row to the DataTable
+	DataTable->AddRow(FName(*RowName), *(FTableRowBase*)NewRowData);
+
+	// Clean up our temporary allocation (AddRow copies the data)
+	RowStruct->DestroyStruct(NewRowData);
+	FMemory::Free(NewRowData);
+
+	DataTable->Modify();
+	DataTable->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("data_table_path"), DataTablePath);
+	Result->SetStringField(TEXT("row_name"), RowName);
+	Result->SetStringField(TEXT("message"), TEXT("Row added successfully"));
+
+	return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleDeleteDataTableRow(const TSharedPtr<FJsonObject>& Params)
+{
+	FString DataTablePath;
+	if (!Params->TryGetStringField(TEXT("data_table_path"), DataTablePath))
+	{
+		return CreateErrorResponse(TEXT("Missing 'data_table_path' parameter"));
+	}
+
+	FString RowName;
+	if (!Params->TryGetStringField(TEXT("row_name"), RowName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'row_name' parameter"));
+	}
+
+	UDataTable* DataTable = LoadObject<UDataTable>(nullptr, *DataTablePath);
+	if (!DataTable)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Failed to load DataTable: %s"), *DataTablePath));
+	}
+
+	// Check if row exists
+	if (!DataTable->FindRowUnchecked(FName(*RowName)))
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Row not found: %s"), *RowName));
+	}
+
+	// Remove the row
+	DataTable->RemoveRow(FName(*RowName));
+
+	DataTable->Modify();
+	DataTable->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("data_table_path"), DataTablePath);
+	Result->SetStringField(TEXT("row_name"), RowName);
+	Result->SetStringField(TEXT("message"), TEXT("Row deleted successfully"));
+
+	return Result;
 }

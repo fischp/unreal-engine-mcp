@@ -256,7 +256,13 @@ FString FEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
 					 CommandType == TEXT("set_asset_property") ||
 					 // Blueprint default property commands
 					 CommandType == TEXT("get_blueprint_default_property") ||
-					 CommandType == TEXT("set_blueprint_default_property"))
+					 CommandType == TEXT("set_blueprint_default_property") ||
+					 // Data Table commands
+					 CommandType == TEXT("list_data_table_rows") ||
+					 CommandType == TEXT("get_data_table_row") ||
+					 CommandType == TEXT("set_data_table_row_field") ||
+					 CommandType == TEXT("add_data_table_row") ||
+					 CommandType == TEXT("delete_data_table_row"))
 			{
 				ResultJson = EditorCommands->HandleCommand(CommandType, Params);
 			}

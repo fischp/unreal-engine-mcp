@@ -726,6 +726,154 @@ def set_blueprint_default_property(
         logger.error(f"set_blueprint_default_property error: {e}")
         return {"success": False, "message": str(e)}
 
+# ============================================================================
+# Data Table Tools
+# ============================================================================
+
+@mcp.tool()
+def list_data_table_rows(data_table_path: str) -> Dict[str, Any]:
+    """List all row names in a DataTable.
+
+    Args:
+        data_table_path: Full path to DataTable, e.g., '/Game/DataAssets/DT_MyTable.DT_MyTable'
+
+    Returns:
+        Dictionary with row_names array, count, and row_struct type name
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+    try:
+        params = {"data_table_path": data_table_path}
+        response = unreal.send_command("list_data_table_rows", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"list_data_table_rows error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+@mcp.tool()
+def get_data_table_row(data_table_path: str, row_name: str) -> Dict[str, Any]:
+    """Get a single row from a DataTable with all its fields.
+
+    Args:
+        data_table_path: Full path to DataTable
+        row_name: Name of the row to retrieve
+
+    Returns:
+        Dictionary with row_data containing all fields with their types and values
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+    try:
+        params = {
+            "data_table_path": data_table_path,
+            "row_name": row_name
+        }
+        response = unreal.send_command("get_data_table_row", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"get_data_table_row error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+@mcp.tool()
+def set_data_table_row_field(
+    data_table_path: str,
+    row_name: str,
+    field_name: str,
+    value: Any
+) -> Dict[str, Any]:
+    """Set a single field value in a DataTable row.
+
+    Args:
+        data_table_path: Full path to DataTable
+        row_name: Name of the row to modify
+        field_name: Name of the field/property to set
+        value: New value for the field (type depends on field type)
+
+    Returns:
+        Dictionary with success status and the new field value
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+    try:
+        params = {
+            "data_table_path": data_table_path,
+            "row_name": row_name,
+            "field_name": field_name,
+            "value": value
+        }
+        response = unreal.send_command("set_data_table_row_field", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"set_data_table_row_field error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+@mcp.tool()
+def add_data_table_row(
+    data_table_path: str,
+    row_name: str,
+    row_data: Dict[str, Any] = None
+) -> Dict[str, Any]:
+    """Add a new row to a DataTable.
+
+    Args:
+        data_table_path: Full path to DataTable
+        row_name: Name for the new row (must be unique)
+        row_data: Optional dictionary of field values to initialize the row with.
+                  Fields not specified will use default values.
+                  Format: {"FieldName": {"value": ...}, ...} or {"FieldName": value, ...}
+
+    Returns:
+        Dictionary with success status
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+    try:
+        params = {
+            "data_table_path": data_table_path,
+            "row_name": row_name
+        }
+        if row_data is not None:
+            params["row_data"] = row_data
+        response = unreal.send_command("add_data_table_row", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"add_data_table_row error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+@mcp.tool()
+def delete_data_table_row(data_table_path: str, row_name: str) -> Dict[str, Any]:
+    """Delete a row from a DataTable.
+
+    Args:
+        data_table_path: Full path to DataTable
+        row_name: Name of the row to delete
+
+    Returns:
+        Dictionary with success status
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+    try:
+        params = {
+            "data_table_path": data_table_path,
+            "row_name": row_name
+        }
+        response = unreal.send_command("delete_data_table_row", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"delete_data_table_row error: {e}")
+        return {"success": False, "message": str(e)}
+
+
 # Essential Blueprint Tools for Physics Actors
 @mcp.tool()
 def create_blueprint(name: str, parent_class: str) -> Dict[str, Any]:
