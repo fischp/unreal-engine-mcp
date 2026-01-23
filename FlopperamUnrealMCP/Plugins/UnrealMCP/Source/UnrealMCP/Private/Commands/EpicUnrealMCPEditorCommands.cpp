@@ -1716,9 +1716,20 @@ FString FEpicUnrealMCPEditorCommands::GetPropertyTypeName(UProperty* Property)
 	{
 		return FString::Printf(TEXT("Class:%s"), *ClassProp->MetaClass->GetName());
 	}
-	if (Cast<UArrayProperty>(Property)) return TEXT("Array");
-	if (Cast<UMapProperty>(Property)) return TEXT("Map");
-	if (Cast<USetProperty>(Property)) return TEXT("Set");
+	if (UArrayProperty* ArrayProp = Cast<UArrayProperty>(Property))
+	{
+		return FString::Printf(TEXT("Array<%s>"), *GetPropertyTypeName(ArrayProp->Inner));
+	}
+	if (UMapProperty* MapProp = Cast<UMapProperty>(Property))
+	{
+		return FString::Printf(TEXT("Map<%s, %s>"),
+			*GetPropertyTypeName(MapProp->KeyProp),
+			*GetPropertyTypeName(MapProp->ValueProp));
+	}
+	if (USetProperty* SetProp = Cast<USetProperty>(Property))
+	{
+		return FString::Printf(TEXT("Set<%s>"), *GetPropertyTypeName(SetProp->ElementProp));
+	}
 
 	return Property->GetClass()->GetName();
 }
@@ -1858,10 +1869,16 @@ TSharedPtr<FJsonValue> FEpicUnrealMCPEditorCommands::PropertyToJsonValue(UProper
 			return MakeShared<FJsonValueArray>(Arr);
 		}
 
-		// Generic struct - export as string
-		FString StructStr;
-		Property->ExportTextItem(StructStr, ValuePtr, nullptr, nullptr, PPF_None);
-		return MakeShared<FJsonValueString>(StructStr);
+		// Generic struct - iterate fields as JSON object
+		TSharedPtr<FJsonObject> StructJson = MakeShared<FJsonObject>();
+		for (TFieldIterator<UProperty> PropIt(Struct); PropIt; ++PropIt)
+		{
+			UProperty* FieldProp = *PropIt;
+			const void* FieldPtr = FieldProp->ContainerPtrToValuePtr<void>(ValuePtr);
+			TSharedPtr<FJsonValue> FieldJson = PropertyToJsonValue(FieldProp, FieldPtr);
+			StructJson->SetField(FieldProp->GetName(), FieldJson);
+		}
+		return MakeShared<FJsonValueObject>(StructJson);
 	}
 
 	// Enum
@@ -1894,6 +1911,67 @@ TSharedPtr<FJsonValue> FEpicUnrealMCPEditorCommands::PropertyToJsonValue(UProper
 			return MakeShared<FJsonValueString>(Class->GetPathName());
 		}
 		return MakeShared<FJsonValueNull>();
+	}
+
+	// Array property
+	if (UArrayProperty* ArrayProp = Cast<UArrayProperty>(Property))
+	{
+		FScriptArrayHelper ArrayHelper(ArrayProp, ValuePtr);
+		TArray<TSharedPtr<FJsonValue>> JsonArray;
+
+		for (int32 i = 0; i < ArrayHelper.Num(); ++i)
+		{
+			void* ElementPtr = ArrayHelper.GetRawPtr(i);
+			TSharedPtr<FJsonValue> ElementJson = PropertyToJsonValue(ArrayProp->Inner, ElementPtr);
+			JsonArray.Add(ElementJson);
+		}
+
+		return MakeShared<FJsonValueArray>(JsonArray);
+	}
+
+	// Map property
+	if (UMapProperty* MapProp = Cast<UMapProperty>(Property))
+	{
+		FScriptMapHelper MapHelper(MapProp, ValuePtr);
+		TSharedPtr<FJsonObject> JsonMap = MakeShared<FJsonObject>();
+
+		for (int32 i = 0; i < MapHelper.Num(); ++i)
+		{
+			if (MapHelper.IsValidIndex(i))
+			{
+				// Get key as string (for JSON object key)
+				void* KeyPtr = MapHelper.GetKeyPtr(i);
+				FString KeyStr;
+				MapProp->KeyProp->ExportTextItem(KeyStr, KeyPtr, nullptr, nullptr, PPF_None);
+
+				// Get value as JSON
+				void* ValuePtrInner = MapHelper.GetValuePtr(i);
+				TSharedPtr<FJsonValue> ValueJson = PropertyToJsonValue(MapProp->ValueProp, ValuePtrInner);
+
+				JsonMap->SetField(KeyStr, ValueJson);
+			}
+		}
+
+		return MakeShared<FJsonValueObject>(JsonMap);
+	}
+
+	// Set property
+	if (USetProperty* SetProp = Cast<USetProperty>(Property))
+	{
+		FScriptSetHelper SetHelper(SetProp, ValuePtr);
+		TArray<TSharedPtr<FJsonValue>> JsonArray;
+
+		for (int32 i = 0; i < SetHelper.Num(); ++i)
+		{
+			if (SetHelper.IsValidIndex(i))
+			{
+				void* ElementPtr = SetHelper.GetElementPtr(i);
+				TSharedPtr<FJsonValue> ElementJson = PropertyToJsonValue(SetProp->ElementProp, ElementPtr);
+				JsonArray.Add(ElementJson);
+			}
+		}
+
+		return MakeShared<FJsonValueArray>(JsonArray);
 	}
 
 	// Fallback: export as text
@@ -2133,7 +2211,23 @@ bool FEpicUnrealMCPEditorCommands::JsonValueToProperty(const TSharedPtr<FJsonVal
 			return false;
 		}
 
-		// Generic struct - import from text
+		// Generic struct - try JSON object first, then string fallback
+		const TSharedPtr<FJsonObject>* JsonObj;
+		if (JsonValue->TryGetObject(JsonObj))
+		{
+			for (TFieldIterator<UProperty> PropIt(Struct); PropIt; ++PropIt)
+			{
+				UProperty* FieldProp = *PropIt;
+				TSharedPtr<FJsonValue> FieldJson = (*JsonObj)->TryGetField(FieldProp->GetName());
+				if (FieldJson.IsValid())
+				{
+					void* FieldPtr = FieldProp->ContainerPtrToValuePtr<void>(ValuePtr);
+					JsonValueToProperty(FieldJson, FieldProp, FieldPtr);
+				}
+			}
+			return true;
+		}
+		// String fallback for backwards compatibility
 		FString StrVal;
 		if (JsonValue->TryGetString(StrVal))
 		{
@@ -2169,6 +2263,86 @@ bool FEpicUnrealMCPEditorCommands::JsonValueToProperty(const TSharedPtr<FJsonVal
 		{
 			UObject* LoadedObj = StaticLoadObject(ObjProp->PropertyClass, nullptr, *PathStr);
 			ObjProp->SetObjectPropertyValue(ValuePtr, LoadedObj);
+			return true;
+		}
+		return false;
+	}
+
+	// Array property
+	if (UArrayProperty* ArrayProp = Cast<UArrayProperty>(Property))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* JsonArray;
+		if (JsonValue->TryGetArray(JsonArray))
+		{
+			FScriptArrayHelper ArrayHelper(ArrayProp, ValuePtr);
+			ArrayHelper.Resize(JsonArray->Num());
+
+			for (int32 i = 0; i < JsonArray->Num(); ++i)
+			{
+				void* ElementPtr = ArrayHelper.GetRawPtr(i);
+				if (!JsonValueToProperty((*JsonArray)[i], ArrayProp->Inner, ElementPtr))
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+		return false;
+	}
+
+	// Map property
+	if (UMapProperty* MapProp = Cast<UMapProperty>(Property))
+	{
+		const TSharedPtr<FJsonObject>* JsonObj;
+		if (JsonValue->TryGetObject(JsonObj))
+		{
+			FScriptMapHelper MapHelper(MapProp, ValuePtr);
+			MapHelper.EmptyValues();
+
+			for (const auto& Pair : (*JsonObj)->Values)
+			{
+				// Add new entry
+				int32 Index = MapHelper.AddDefaultValue_Invalid_NeedsRehash();
+
+				// Set key from string
+				void* KeyPtr = MapHelper.GetKeyPtr(Index);
+				const TCHAR* KeyBuffer = *Pair.Key;
+				MapProp->KeyProp->ImportText(KeyBuffer, KeyPtr, PPF_None, nullptr);
+
+				// Set value
+				void* ValuePtrInner = MapHelper.GetValuePtr(Index);
+				if (!JsonValueToProperty(Pair.Value, MapProp->ValueProp, ValuePtrInner))
+				{
+					return false;
+				}
+			}
+
+			MapHelper.Rehash();
+			return true;
+		}
+		return false;
+	}
+
+	// Set property
+	if (USetProperty* SetProp = Cast<USetProperty>(Property))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* JsonArray;
+		if (JsonValue->TryGetArray(JsonArray))
+		{
+			FScriptSetHelper SetHelper(SetProp, ValuePtr);
+			SetHelper.EmptyElements();
+
+			for (const TSharedPtr<FJsonValue>& ElementJson : *JsonArray)
+			{
+				int32 Index = SetHelper.AddDefaultValue_Invalid_NeedsRehash();
+				void* ElementPtr = SetHelper.GetElementPtr(Index);
+				if (!JsonValueToProperty(ElementJson, SetProp->ElementProp, ElementPtr))
+				{
+					return false;
+				}
+			}
+
+			SetHelper.Rehash();
 			return true;
 		}
 		return false;

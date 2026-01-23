@@ -530,7 +530,306 @@ def editor_delete_object(name: str) -> Dict[str, Any]:
 
 
 # ============================================================================
-# Tool 12: Editor Take Screenshot
+# Tool 12: Get Actor Property
+# ============================================================================
+@mcp.tool()
+def get_actor_property(name: str, property: str) -> Dict[str, Any]:
+    """Get a property value from an actor.
+
+    Args:
+        name: Name of the actor
+        property: Name of the property to get
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {"name": name, "property": property}
+        response = unreal.send_command("get_actor_property", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"get_actor_property error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+# ============================================================================
+# Tool 13: Set Actor Property
+# ============================================================================
+@mcp.tool()
+def set_actor_property(name: str, property: str, value: Any) -> Dict[str, Any]:
+    """Set a property value on an actor.
+
+    Args:
+        name: Name of the actor
+        property: Name of the property to set
+        value: The value to set (type depends on property)
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {"name": name, "property": property, "value": value}
+        response = unreal.send_command("set_actor_property", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"set_actor_property error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+# ============================================================================
+# Tool 14: Get Asset Property
+# ============================================================================
+@mcp.tool()
+def get_asset_property(asset_path: str, property: str) -> Dict[str, Any]:
+    """Get a property value from a Data Asset or any UObject asset.
+
+    Args:
+        asset_path: Path to the asset (e.g., "/Game/Data/DA_GameDifficultySettings")
+        property: Name of the property to get
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {"asset_path": asset_path, "property": property}
+        response = unreal.send_command("get_asset_property", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"get_asset_property error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+# ============================================================================
+# Tool 15: Set Asset Property
+# ============================================================================
+@mcp.tool()
+def set_asset_property(asset_path: str, property: str, value: Any) -> Dict[str, Any]:
+    """Set a property value on a Data Asset or any UObject asset.
+
+    Args:
+        asset_path: Path to the asset (e.g., "/Game/Data/DA_GameDifficultySettings")
+        property: Name of the property to set
+        value: The value to set (type depends on property - supports arrays, maps, structs)
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {"asset_path": asset_path, "property": property, "value": value}
+        response = unreal.send_command("set_asset_property", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"set_asset_property error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+# ============================================================================
+# Tool 16: List Data Table Rows
+# ============================================================================
+@mcp.tool()
+def list_data_table_rows(data_table_path: str) -> Dict[str, Any]:
+    """List all row names in a Data Table.
+
+    Args:
+        data_table_path: Path to the Data Table asset (e.g., "/Game/DataAssets/DT_AllPlayerItems")
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {"data_table_path": data_table_path}
+        response = unreal.send_command("list_data_table_rows", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"list_data_table_rows error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+# ============================================================================
+# Tool 17: Get Data Table Row
+# ============================================================================
+@mcp.tool()
+def get_data_table_row(data_table_path: str, row_name: str) -> Dict[str, Any]:
+    """Get a specific row from a Data Table.
+
+    Args:
+        data_table_path: Path to the Data Table asset
+        row_name: Name of the row to retrieve
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {"data_table_path": data_table_path, "row_name": row_name}
+        response = unreal.send_command("get_data_table_row", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"get_data_table_row error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+# ============================================================================
+# Tool 18: Set Data Table Row Field
+# ============================================================================
+@mcp.tool()
+def set_data_table_row_field(data_table_path: str, row_name: str, field_name: str, value: Any) -> Dict[str, Any]:
+    """Set a field value in a Data Table row.
+
+    Args:
+        data_table_path: Path to the Data Table asset
+        row_name: Name of the row to modify
+        field_name: Name of the field to set
+        value: The value to set (supports arrays, maps, structs)
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {"data_table_path": data_table_path, "row_name": row_name, "field_name": field_name, "value": value}
+        response = unreal.send_command("set_data_table_row_field", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"set_data_table_row_field error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+# ============================================================================
+# Tool 19: Add Data Table Row
+# ============================================================================
+@mcp.tool()
+def add_data_table_row(data_table_path: str, row_name: str) -> Dict[str, Any]:
+    """Add a new row to a Data Table with default values.
+
+    Args:
+        data_table_path: Path to the Data Table asset
+        row_name: Name for the new row
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {"data_table_path": data_table_path, "row_name": row_name}
+        response = unreal.send_command("add_data_table_row", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"add_data_table_row error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+# ============================================================================
+# Tool 20: Delete Data Table Row
+# ============================================================================
+@mcp.tool()
+def delete_data_table_row(data_table_path: str, row_name: str) -> Dict[str, Any]:
+    """Delete a row from a Data Table.
+
+    Args:
+        data_table_path: Path to the Data Table asset
+        row_name: Name of the row to delete
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {"data_table_path": data_table_path, "row_name": row_name}
+        response = unreal.send_command("delete_data_table_row", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"delete_data_table_row error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+# ============================================================================
+# Tool 21: Spawn Blueprint Actor
+# ============================================================================
+@mcp.tool()
+def spawn_blueprint_actor(
+    blueprint_path: str,
+    actor_name: str,
+    location: List[float] = None,
+    rotation: List[float] = None
+) -> Dict[str, Any]:
+    """Spawn an actor from a Blueprint class.
+
+    Args:
+        blueprint_path: Full path to Blueprint (e.g., "/Game/Blueprints/BP_MyActor.BP_MyActor")
+        actor_name: Unique name for the new actor
+        location: Optional [X, Y, Z] spawn location
+        rotation: Optional [Pitch, Yaw, Roll] spawn rotation
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {"blueprint_path": blueprint_path, "actor_name": actor_name}
+        if location:
+            params["location"] = location
+        if rotation:
+            params["rotation"] = rotation
+        response = unreal.send_command("spawn_blueprint_actor", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"spawn_blueprint_actor error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+# ============================================================================
+# Tool 22: Copy Actor
+# ============================================================================
+@mcp.tool()
+def copy_actor(
+    source_name: str,
+    new_name: str,
+    location: List[float] = None,
+    rotation: List[float] = None
+) -> Dict[str, Any]:
+    """Copy an existing actor to create a new one.
+
+    Args:
+        source_name: Name of the actor to copy
+        new_name: Name for the new copied actor
+        location: Optional [X, Y, Z] location for the copy
+        rotation: Optional [Pitch, Yaw, Roll] rotation for the copy
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {"source_name": source_name, "new_name": new_name}
+        if location:
+            params["location"] = location
+        if rotation:
+            params["rotation"] = rotation
+        response = unreal.send_command("copy_actor", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"copy_actor error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+# ============================================================================
+# Tool 23: Get Blueprint Default Property
+# ============================================================================
+@mcp.tool()
+def get_blueprint_default_property(blueprint_path: str, property: str) -> Dict[str, Any]:
+    """Get a default property value from a Blueprint's Class Default Object (CDO).
+
+    Args:
+        blueprint_path: Path to the Blueprint asset
+        property: Name of the property to get
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {"blueprint_path": blueprint_path, "property": property}
+        response = unreal.send_command("get_blueprint_default_property", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"get_blueprint_default_property error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+# ============================================================================
+# Tool 24: Set Blueprint Default Property
+# ============================================================================
+@mcp.tool()
+def set_blueprint_default_property(blueprint_path: str, property: str, value: Any) -> Dict[str, Any]:
+    """Set a default property value on a Blueprint's Class Default Object (CDO).
+
+    Args:
+        blueprint_path: Path to the Blueprint asset
+        property: Name of the property to set
+        value: The value to set (supports arrays, maps, structs)
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {"blueprint_path": blueprint_path, "property": property, "value": value}
+        response = unreal.send_command("set_blueprint_default_property", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"set_blueprint_default_property error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+# ============================================================================
+# Tool 25: Editor Take Screenshot
 # ============================================================================
 @mcp.tool()
 def editor_take_screenshot(filename: str = "") -> Dict[str, Any]:
