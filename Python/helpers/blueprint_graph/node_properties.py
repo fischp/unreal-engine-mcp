@@ -7,7 +7,7 @@ Updated: 2025-11-03 - Extended to support semantic node editing (add_pin, remove
 IMPORTANT NOTE FOR FUTURE AI DEVELOPERS
 ================================================================================
 
-This module implements SEMANTIC NODE EDITING for UE5.5 Blueprint nodes.
+This module implements SEMANTIC NODE EDITING for UE4.27 Blueprint nodes.
 Two completely different approaches are used depending on the operation:
 
 APPROACH 1: PUBLIC API METHODS (for pin management)
@@ -36,7 +36,7 @@ See: SwitchEnumEditor.cpp for working implementation
 
 COMMON MISTAKES TO AVOID:
 =========================
-❌ Using FindFProperty for pin management (returns nullptr in UE5.5)
+❌ Using FindFProperty for pin management (returns nullptr in UE4.27)
 ❌ Manually manipulating pins without calling Modify() first
 ❌ Forgetting to call MarkBlueprintAsStructurallyModified() after changes
 ❌ Not calling Graph->NotifyGraphChanged() to update the UI

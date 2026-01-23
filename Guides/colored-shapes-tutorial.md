@@ -12,7 +12,7 @@ This tutorial shows how to create custom colored shapes (spheres, cubes, cylinde
 
 ## 📋 Prerequisites
 
-- Unreal Engine 5.5+ with UnrealMCP plugin enabled
+- Unreal Engine 4.27 with UnrealMCP plugin enabled
 - Python MCP server running and connected
 - Basic understanding of Unreal's coordinate system
 

@@ -28,9 +28,9 @@ However, we've now built something significantly more advanced: **The Flop Agent
 
 # The Most Advanced MCP Server for Unreal Engine
 
-**Control Unreal Engine 5.5+ through AI with natural language** — This MCP server enables AI clients to build incredible 3D worlds and architectural masterpieces. Create entire towns, medieval castles, modern mansions, challenging mazes, and complex structures with AI-powered commands.
+**Control Unreal Engine 4.27 through AI with natural language** — This MCP server enables AI clients to build incredible 3D worlds and architectural masterpieces. Create entire towns, medieval castles, modern mansions, challenging mazes, and complex structures with AI-powered commands.
 
-[![Unreal Engine](https://img.shields.io/badge/Unreal%20Engine-5.5%2B-orange.svg)](https://www.unrealengine.com/)
+[![Unreal Engine](https://img.shields.io/badge/Unreal%20Engine-4.27-orange.svg)](https://www.unrealengine.com/)
 [![YouTube](https://img.shields.io/badge/YouTube-@flopperam-red.svg?logo=youtube)](https://youtube.com/@flopperam)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/3KNkke3rnH)
 [![Twitter](https://img.shields.io/badge/X-@Flopperam-1DA1F2.svg?logo=x&logoColor=white)](https://twitter.com/Flopperam)
@@ -112,7 +112,7 @@ Check out these examples of the MCP server in action on our channel:
 ## Lightning-Fast Setup
 
 ### Prerequisites
-- **Unreal Engine 5.5+** 
+- **Unreal Engine 4.27** 
 - **Python 3.12+**
 - **MCP Client** (Claude Desktop, Cursor, or Windsurf)
 
@@ -143,7 +143,7 @@ Edit → Plugins → Search "UnrealMCP" → Enable → Restart Editor
 **Option C: Install for All Projects**
 ```bash
 # Copy to Engine plugins folder (available to all projects)
-cp -r FlopperamUnrealMCP/Plugins/UnrealMCP/ "C:/Program Files/Epic Games/UE_5.5/Engine/Plugins/"
+cp -r FlopperamUnrealMCP/Plugins/UnrealMCP/ "C:/Program Files/Epic Games/UE_4.27/Engine/Plugins/"
 
 # Enable in any project through the Plugin Browser
 Edit → Plugins → Search "UnrealMCP" → Enable
@@ -163,11 +163,11 @@ Note your Xcode version number (e.g., `26.0.1`, `16.0`, `15.2`, etc.). If your v
 
 ##### Step 2: Patch Unreal Engine SDK Configuration
 
-Edit the file at your Unreal Engine installation (replace `UE_5.X` with your version):
+Edit the file at your Unreal Engine installation (replace `UE_4.27` with your version):
 
 ```bash
 # Path to edit:
-/Users/Shared/Epic Games/UE_5.X/Engine/Config/Apple/Apple_SDK.json
+/Users/Shared/Epic Games/UE_4.27/Engine/Config/Apple/Apple_SDK.json
 ```
 
 Update the following values:
@@ -200,14 +200,14 @@ Replace `YOUR_XCODE_VERSION` with your major Xcode version from Step 1.
 Run the Unreal Build Tool to compile the project:
 
 ```bash
-"/Users/Shared/Epic Games/UE_5.X/Engine/Build/BatchFiles/Mac/Build.sh" \
+"/Users/Shared/Epic Games/UE_4.27/Engine/Build/BatchFiles/Mac/Build.sh" \
   UnrealEditor Mac Development \
   -Project="/path/to/unreal-engine-mcp/FlopperamUnrealMCP/FlopperamUnrealMCP.uproject" \
   -WaitMutex
 ```
 
 Replace:
-- `UE_5.X` with your Unreal Engine version (e.g., `UE_5.5`)
+- `UE_4.27` with your Unreal Engine version
 - `/path/to/unreal-engine-mcp/` with the actual path to your cloned repository
 
 ##### Step 4: Open the Project
@@ -305,7 +305,7 @@ Note that on Mac, and sometimes on Windows, you may have to replace the "uv" str
 graph TB
     A[AI Client<br/>Cursor/Claude/Windsurf] -->|MCP Protocol| B[Python Server<br/>unreal_mcp_server_advanced.py]
     B -->|TCP Socket| C[C++ Plugin<br/>UnrealMCP]
-    C -->|Native API| D[Unreal Engine 5.5+<br/>Editor & Runtime]
+    C -->|Native API| D[Unreal Engine 4.27<br/>Editor & Runtime]
     
     B --> E[Advanced Tools]
     E --> F[World Building]
