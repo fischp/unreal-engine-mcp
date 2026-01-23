@@ -251,6 +251,7 @@ FString FEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
 					 // Blueprint Actor commands
 					 CommandType == TEXT("spawn_blueprint_actor") ||
 					 CommandType == TEXT("copy_actor") ||
+					 CommandType == TEXT("rename_actor") ||
 					 // Asset property commands
 					 CommandType == TEXT("get_asset_property") ||
 					 CommandType == TEXT("set_asset_property") ||

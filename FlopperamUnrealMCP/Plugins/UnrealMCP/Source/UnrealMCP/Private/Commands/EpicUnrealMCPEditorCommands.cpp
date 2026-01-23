@@ -81,6 +81,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleCommand(const FStrin
 	{
 		return HandleSetActorTransform(Params);
 	}
+	else if (CommandType == TEXT("rename_actor"))
+	{
+		return HandleRenameActor(Params);
+	}
 	// New tools
 	else if (CommandType == TEXT("get_unreal_engine_path"))
 	{
@@ -305,6 +309,9 @@ TSharedPtr<FJsonValue> FEpicUnrealMCPEditorCommands::ActorToJson(AActor* Actor)
 	ScaleArray.Add(MakeShared<FJsonValueNumber>(Scale.Z));
 	ActorObj->SetArrayField(TEXT("scale"), ScaleArray);
 
+	// Add folder path for World Outliner organization
+	ActorObj->SetStringField(TEXT("folder"), Actor->GetFolderPath().ToString());
+
 	return MakeShared<FJsonValueObject>(ActorObj);
 }
 
@@ -340,6 +347,9 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::ActorToJsonObject(AActor* 
 	ScaleArray.Add(MakeShared<FJsonValueNumber>(Scale.Y));
 	ScaleArray.Add(MakeShared<FJsonValueNumber>(Scale.Z));
 	ActorObj->SetArrayField(TEXT("scale"), ScaleArray);
+
+	// Add folder path for World Outliner organization
+	ActorObj->SetStringField(TEXT("folder"), Actor->GetFolderPath().ToString());
 
 	return ActorObj;
 }
@@ -545,6 +555,84 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleDeleteActor(const TS
 	}
 
 	return CreateErrorResponse(FString::Printf(TEXT("Actor not found: %s"), *ActorName));
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleRenameActor(const TSharedPtr<FJsonObject>& Params)
+{
+	// Get current actor name
+	FString ActorName;
+	if (!Params->TryGetStringField(TEXT("name"), ActorName))
+	{
+		return CreateErrorResponse(TEXT("Missing required parameter: name"));
+	}
+
+	// Get new name
+	FString NewName;
+	if (!Params->TryGetStringField(TEXT("new_name"), NewName))
+	{
+		return CreateErrorResponse(TEXT("Missing required parameter: new_name"));
+	}
+
+	// Get editor world
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World)
+	{
+		return CreateErrorResponse(TEXT("No editor world available"));
+	}
+
+	// Find the actor to rename
+	AActor* TargetActor = nullptr;
+	AActor* ExistingActorWithNewName = nullptr;
+	TArray<AActor*> AllActors;
+	UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), AllActors);
+
+	for (AActor* Actor : AllActors)
+	{
+		if (Actor)
+		{
+			if (Actor->GetName() == ActorName)
+			{
+				TargetActor = Actor;
+			}
+			if (Actor->GetName() == NewName)
+			{
+				ExistingActorWithNewName = Actor;
+			}
+		}
+	}
+
+	if (!TargetActor)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Actor not found: %s"), *ActorName));
+	}
+
+	if (ExistingActorWithNewName)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Actor with name already exists: %s"), *NewName));
+	}
+
+	// Rename the actor
+	TargetActor->Rename(*NewName, nullptr);
+	TargetActor->SetActorLabel(NewName);
+
+	// Return success with actor info
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("status"), TEXT("success"));
+
+	TSharedPtr<FJsonObject> ActorResult = MakeShared<FJsonObject>();
+	ActorResult->SetBoolField(TEXT("success"), true);
+	ActorResult->SetStringField(TEXT("old_name"), ActorName);
+	ActorResult->SetStringField(TEXT("new_name"), NewName);
+
+	// Include full actor info
+	TSharedPtr<FJsonObject> ActorInfo = ActorToJsonObject(TargetActor);
+	for (auto& Field : ActorInfo->Values)
+	{
+		ActorResult->SetField(Field.Key, Field.Value);
+	}
+
+	Result->SetObjectField(TEXT("result"), ActorResult);
+	return Result;
 }
 
 TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSetActorTransform(const TSharedPtr<FJsonObject>& Params)
@@ -2422,6 +2510,29 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSetActorProperty(con
 	if (!Actor)
 	{
 		return CreateErrorResponse(FString::Printf(TEXT("Actor not found: %s"), *ActorName));
+	}
+
+	// Special handling for FolderPath - use SetFolderPath() to properly register with World Outliner
+	if (PropertyName == TEXT("FolderPath"))
+	{
+		FString FolderPath;
+		TSharedPtr<FJsonValue> JsonValue = Params->TryGetField(TEXT("value"));
+		if (JsonValue.IsValid() && JsonValue->Type == EJson::String)
+		{
+			FolderPath = JsonValue->AsString();
+		}
+
+		Actor->SetFolderPath(*FolderPath);
+		Actor->Modify();
+		Actor->MarkPackageDirty();
+
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetBoolField(TEXT("success"), true);
+		Result->SetStringField(TEXT("actor"), ActorName);
+		Result->SetStringField(TEXT("property"), PropertyName);
+		Result->SetStringField(TEXT("type"), TEXT("Name"));
+		Result->SetStringField(TEXT("value"), Actor->GetFolderPath().ToString());
+		return Result;
 	}
 
 	// Find the property on the actor's class

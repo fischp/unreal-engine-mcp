@@ -838,6 +838,27 @@ def copy_actor(
 
 
 # ============================================================================
+# Tool: Rename Actor
+# ============================================================================
+@mcp.tool()
+def rename_actor(name: str, new_name: str) -> Dict[str, Any]:
+    """Rename an existing actor.
+
+    Args:
+        name: Current name of the actor
+        new_name: New name for the actor
+    """
+    unreal = get_unreal_connection()
+    try:
+        params = {"name": name, "new_name": new_name}
+        response = unreal.send_command("rename_actor", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"rename_actor error: {e}")
+        return {"success": False, "message": str(e)}
+
+
+# ============================================================================
 # Tool 23: Get Blueprint Default Property
 # ============================================================================
 @mcp.tool()

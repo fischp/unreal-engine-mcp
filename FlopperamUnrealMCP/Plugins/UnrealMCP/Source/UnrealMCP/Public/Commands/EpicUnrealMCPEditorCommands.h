@@ -29,6 +29,7 @@ private:
 	TSharedPtr<FJsonObject> HandleSpawnActor(const TSharedPtr<FJsonObject>& Params);
 	TSharedPtr<FJsonObject> HandleDeleteActor(const TSharedPtr<FJsonObject>& Params);
 	TSharedPtr<FJsonObject> HandleSetActorTransform(const TSharedPtr<FJsonObject>& Params);
+	TSharedPtr<FJsonObject> HandleRenameActor(const TSharedPtr<FJsonObject>& Params);
 
 	// New tools for UE4.27
 	TSharedPtr<FJsonObject> HandleGetUnrealEnginePath(const TSharedPtr<FJsonObject>& Params);

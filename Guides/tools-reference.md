@@ -279,14 +279,50 @@ Remove actors from the level.
 **Parameters:**
 - `name` (string): Name of actor to delete
 
+### rename_actor
+Rename an existing actor.
+
+**Parameters:**
+- `name` (string): Current name of the actor
+- `new_name` (string): New name for the actor
+
+**Returns:** Object with `old_name`, `new_name`, and full actor info including the new `folder` field.
+
+**Example:**
+```bash
+rename_actor(name="OldActorName", new_name="NewActorName")
+```
+
 ### set_actor_transform
 Modify actor position, rotation, and scale.
 
 **Parameters:**
 - `name` (string): Actor to transform
 - `location` (array): New world position (optional)
-- `rotation` (array): New rotation in degrees (optional)  
+- `rotation` (array): New rotation in degrees (optional)
 - `scale` (array): New scale factors (optional)
+
+## 📁 World Outliner Organization
+
+### Setting Actor Folder Path
+Organize actors into World Outliner folders using `set_actor_property` with `FolderPath`.
+
+**Usage:**
+```bash
+# Set an actor's folder
+set_actor_property(name="MyActor", property="FolderPath", value="Folder/SubFolder")
+
+# Get an actor's current folder
+get_actor_property(name="MyActor", property="FolderPath")
+```
+
+**Folder Path Format:**
+- Use forward slashes `/` to separate folder levels
+- Example: `"Waves/Wave6"` places the actor in a "Wave6" subfolder under "Waves"
+- Empty string `""` places the actor at the root level
+- Folders are created automatically if they don't exist
+
+**Note:** All actor queries (`find_actors_by_name`, `get_actors_in_level`, etc.) now include a `folder` field showing the actor's World Outliner folder.
 
 ---
 
