@@ -271,11 +271,11 @@ def reset_unreal_connection():
 
 
 @asynccontextmanager
-async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
+async def server_lifespan(app: FastMCP):
     logger.info("UnrealMCP UE4.27 server starting up")
     logger.info("Connection will be established lazily on first tool call")
     try:
-        yield {}
+        yield
     finally:
         reset_unreal_connection()
         logger.info("Unreal MCP UE4.27 server shut down")
