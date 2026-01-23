@@ -2571,8 +2571,40 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSetActorProperty(con
 	Actor->Modify();
 	Actor->MarkPackageDirty();
 
-	// Notify about property change
-	Actor->PostEditChange();
+	// Notify about property change with proper property info
+	// This allows actors like SVGLegionSpawn to detect which property changed
+	// and update their editor visualization accordingly
+	FPropertyChangedEvent PropertyChangedEvent(Property);
+	Actor->PostEditChangeProperty(PropertyChangedEvent);
+
+	// Special handling for struct properties that contain sub-properties affecting visualization
+	// When setting a struct like SpawnContext, also trigger events for key sub-properties
+	// so that actors can properly update their editor visualization
+	UStructProperty* StructProp = Cast<UStructProperty>(Property);
+	if (StructProp)
+	{
+		UScriptStruct* Struct = StructProp->Struct;
+		if (Struct)
+		{
+			// List of sub-property names that commonly affect editor visualization
+			static const FName VisualizationProperties[] = {
+				FName("SoldierType"),
+				FName("SpawnType"),
+				FName("TeamID"),
+				FName("MissionSpawnWave"),
+				FName("bDisabled")
+			};
+
+			for (const FName& SubPropName : VisualizationProperties)
+			{
+				if (UProperty* SubProp = Struct->FindPropertyByName(SubPropName))
+				{
+					FPropertyChangedEvent SubPropEvent(SubProp);
+					Actor->PostEditChangeProperty(SubPropEvent);
+				}
+			}
+		}
+	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("success"), true);
