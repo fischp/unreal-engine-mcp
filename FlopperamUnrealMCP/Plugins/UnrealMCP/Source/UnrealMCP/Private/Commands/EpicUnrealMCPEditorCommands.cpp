@@ -224,6 +224,10 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleCommand(const FStrin
 	{
 		return HandleDeleteDataTableRow(Params);
 	}
+	else if (CommandType == TEXT("set_data_table_array_element"))
+	{
+		return HandleSetDataTableArrayElement(Params);
+	}
 
 	return CreateErrorResponse(FString::Printf(TEXT("Unknown editor command: %s"), *CommandType));
 }
@@ -3198,6 +3202,133 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleDeleteDataTableRow(c
 	Result->SetStringField(TEXT("data_table_path"), DataTablePath);
 	Result->SetStringField(TEXT("row_name"), RowName);
 	Result->SetStringField(TEXT("message"), TEXT("Row deleted successfully"));
+
+	return Result;
+}
+
+TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSetDataTableArrayElement(const TSharedPtr<FJsonObject>& Params)
+{
+	// Get required parameters
+	FString DataTablePath;
+	if (!Params->TryGetStringField(TEXT("data_table_path"), DataTablePath))
+	{
+		return CreateErrorResponse(TEXT("Missing 'data_table_path' parameter"));
+	}
+
+	FString RowName;
+	if (!Params->TryGetStringField(TEXT("row_name"), RowName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'row_name' parameter"));
+	}
+
+	FString ArrayFieldName;
+	if (!Params->TryGetStringField(TEXT("array_field"), ArrayFieldName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'array_field' parameter"));
+	}
+
+	int32 ElementIndex = -1;
+	if (!Params->TryGetNumberField(TEXT("element_index"), ElementIndex))
+	{
+		return CreateErrorResponse(TEXT("Missing 'element_index' parameter"));
+	}
+
+	FString ElementFieldName;
+	if (!Params->TryGetStringField(TEXT("element_field"), ElementFieldName))
+	{
+		return CreateErrorResponse(TEXT("Missing 'element_field' parameter"));
+	}
+
+	if (!Params->HasField(TEXT("value")))
+	{
+		return CreateErrorResponse(TEXT("Missing 'value' parameter"));
+	}
+
+	// Load the DataTable
+	UDataTable* DataTable = LoadObject<UDataTable>(nullptr, *DataTablePath);
+	if (!DataTable)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Failed to load DataTable: %s"), *DataTablePath));
+	}
+
+	const UScriptStruct* RowStruct = DataTable->GetRowStruct();
+	if (!RowStruct)
+	{
+		return CreateErrorResponse(TEXT("DataTable has no row struct"));
+	}
+
+	void* RowData = DataTable->FindRowUnchecked(FName(*RowName));
+	if (!RowData)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Row not found: %s"), *RowName));
+	}
+
+	// Find the array property
+	FProperty* ArrayProperty = const_cast<UScriptStruct*>(RowStruct)->FindPropertyByName(FName(*ArrayFieldName));
+	if (!ArrayProperty)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Array field not found: %s"), *ArrayFieldName));
+	}
+
+	FArrayProperty* ArrayProp = CastField<FArrayProperty>(ArrayProperty);
+	if (!ArrayProp)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Field '%s' is not an array"), *ArrayFieldName));
+	}
+
+	void* ArrayPtr = ArrayProperty->ContainerPtrToValuePtr<void>(RowData);
+	FScriptArrayHelper ArrayHelper(ArrayProp, ArrayPtr);
+
+	// Validate index
+	if (ElementIndex < 0 || ElementIndex >= ArrayHelper.Num())
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Element index %d out of range (array has %d elements)"), ElementIndex, ArrayHelper.Num()));
+	}
+
+	// Get element pointer
+	void* ElementPtr = ArrayHelper.GetRawPtr(ElementIndex);
+
+	// Check if inner property is a struct
+	FStructProperty* StructProp = CastField<FStructProperty>(ArrayProp->Inner);
+	if (!StructProp)
+	{
+		return CreateErrorResponse(TEXT("Array inner type is not a struct"));
+	}
+
+	UScriptStruct* ElementStruct = StructProp->Struct;
+
+	// Find the field within the struct element
+	FProperty* FieldProperty = ElementStruct->FindPropertyByName(FName(*ElementFieldName));
+	if (!FieldProperty)
+	{
+		return CreateErrorResponse(FString::Printf(TEXT("Field '%s' not found in struct"), *ElementFieldName));
+	}
+
+	void* FieldPtr = FieldProperty->ContainerPtrToValuePtr<void>(ElementPtr);
+	TSharedPtr<FJsonValue> JsonValue = Params->TryGetField(TEXT("value"));
+
+	if (!JsonValueToProperty(JsonValue, FieldProperty, FieldPtr))
+	{
+		return CreateErrorResponse(FString::Printf(
+			TEXT("Failed to set field value. Field type: %s"),
+			*GetPropertyTypeName(FieldProperty)
+		));
+	}
+
+	// Mark dirty and notify
+	DataTable->Modify();
+	DataTable->MarkPackageDirty();
+	DataTable->HandleDataTableChanged(FName(*RowName));
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("data_table_path"), DataTablePath);
+	Result->SetStringField(TEXT("row_name"), RowName);
+	Result->SetStringField(TEXT("array_field"), ArrayFieldName);
+	Result->SetNumberField(TEXT("element_index"), ElementIndex);
+	Result->SetStringField(TEXT("element_field"), ElementFieldName);
+	Result->SetStringField(TEXT("field_type"), GetPropertyTypeName(FieldProperty));
+	Result->SetField(TEXT("new_value"), PropertyToJsonValue(FieldProperty, FieldPtr));
 
 	return Result;
 }

@@ -98,6 +98,7 @@ private:
 	TSharedPtr<FJsonObject> HandleSetDataTableRowField(const TSharedPtr<FJsonObject>& Params);
 	TSharedPtr<FJsonObject> HandleAddDataTableRow(const TSharedPtr<FJsonObject>& Params);
 	TSharedPtr<FJsonObject> HandleDeleteDataTableRow(const TSharedPtr<FJsonObject>& Params);
+	TSharedPtr<FJsonObject> HandleSetDataTableArrayElement(const TSharedPtr<FJsonObject>& Params);
 
 	// Data Table Helpers
 	TSharedPtr<FJsonObject> RowStructToJson(UScriptStruct* RowStruct, const void* RowData);

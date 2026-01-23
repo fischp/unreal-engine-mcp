@@ -262,7 +262,8 @@ FString FEpicUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const T
 					 CommandType == TEXT("get_data_table_row") ||
 					 CommandType == TEXT("set_data_table_row_field") ||
 					 CommandType == TEXT("add_data_table_row") ||
-					 CommandType == TEXT("delete_data_table_row"))
+					 CommandType == TEXT("delete_data_table_row") ||
+					 CommandType == TEXT("set_data_table_array_element"))
 			{
 				ResultJson = EditorCommands->HandleCommand(CommandType, Params);
 			}
