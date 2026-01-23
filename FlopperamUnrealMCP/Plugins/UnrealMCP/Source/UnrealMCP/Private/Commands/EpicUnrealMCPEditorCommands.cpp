@@ -2818,7 +2818,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleGetDataTableRow(cons
 		return CreateErrorResponse(FString::Printf(TEXT("Failed to load DataTable: %s"), *DataTablePath));
 	}
 
-	UScriptStruct* RowStruct = DataTable->GetRowStruct();
+	const UScriptStruct* RowStruct = DataTable->GetRowStruct();
 	if (!RowStruct)
 	{
 		return CreateErrorResponse(TEXT("DataTable has no row struct"));
@@ -2830,7 +2830,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleGetDataTableRow(cons
 		return CreateErrorResponse(FString::Printf(TEXT("Row not found: %s"), *RowName));
 	}
 
-	TSharedPtr<FJsonObject> RowJson = RowStructToJson(RowStruct, RowData);
+	TSharedPtr<FJsonObject> RowJson = RowStructToJson(const_cast<UScriptStruct*>(RowStruct), RowData);
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("success"), true);
@@ -2873,7 +2873,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSetDataTableRowField
 		return CreateErrorResponse(FString::Printf(TEXT("Failed to load DataTable: %s"), *DataTablePath));
 	}
 
-	UScriptStruct* RowStruct = DataTable->GetRowStruct();
+	const UScriptStruct* RowStruct = DataTable->GetRowStruct();
 	if (!RowStruct)
 	{
 		return CreateErrorResponse(TEXT("DataTable has no row struct"));
@@ -2886,7 +2886,7 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleSetDataTableRowField
 	}
 
 	// Find the property in the row struct
-	UProperty* Property = RowStruct->FindPropertyByName(FName(*FieldName));
+	FProperty* Property = const_cast<UScriptStruct*>(RowStruct)->FindPropertyByName(FName(*FieldName));
 	if (!Property)
 	{
 		return CreateErrorResponse(FString::Printf(TEXT("Field not found: %s"), *FieldName));
@@ -2939,11 +2939,12 @@ TSharedPtr<FJsonObject> FEpicUnrealMCPEditorCommands::HandleAddDataTableRow(cons
 		return CreateErrorResponse(FString::Printf(TEXT("Failed to load DataTable: %s"), *DataTablePath));
 	}
 
-	UScriptStruct* RowStruct = DataTable->GetRowStruct();
-	if (!RowStruct)
+	const UScriptStruct* RowStructConst = DataTable->GetRowStruct();
+	if (!RowStructConst)
 	{
 		return CreateErrorResponse(TEXT("DataTable has no row struct"));
 	}
+	UScriptStruct* RowStruct = const_cast<UScriptStruct*>(RowStructConst);
 
 	// Check if row already exists
 	if (DataTable->FindRowUnchecked(FName(*RowName)))
