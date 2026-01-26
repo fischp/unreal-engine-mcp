@@ -106,6 +106,7 @@ Check out these examples of the MCP server in action on our channel:
 | **Physics & Materials** | `spawn_physics_blueprint_actor`, `set_physics_properties`, `get_available_materials`, `apply_material_to_actor`, `apply_material_to_blueprint`, `set_mesh_material_color` | Create realistic physics simulations and material systems |
 | **Blueprint System** | `create_blueprint`, `compile_blueprint`, `add_component_to_blueprint`, `set_static_mesh_properties` | Visual scripting and custom actor creation |
 | **Actor Management** | `get_actors_in_level`, `find_actors_by_name`, `delete_actor`, `set_actor_transform`, `get_actor_material_info` | Precise control over scene objects and inspection |
+| **Data Tables** | `list_data_table_rows`, `get_data_table_row`, `set_data_table_row_field`, `add_data_table_row`, `delete_data_table_row`, `set_data_table_array_element` | Read and modify Data Table rows and fields at runtime |
 
 ---
 

@@ -874,6 +874,57 @@ def delete_data_table_row(data_table_path: str, row_name: str) -> Dict[str, Any]
         return {"success": False, "message": str(e)}
 
 
+@mcp.tool()
+def set_data_table_array_element(
+    data_table_path: str,
+    row_name: str,
+    array_field: str,
+    element_index: int,
+    element_field: str,
+    value: Any
+) -> Dict[str, Any]:
+    """Set a specific field within an array element in a Data Table row.
+
+    This is useful for modifying a single field within a struct that is inside an array,
+    without having to replace the entire array.
+
+    Args:
+        data_table_path: Full path to DataTable (e.g., "/Game/DataTables/DT_MyTable")
+        row_name: Name of the row containing the array
+        array_field: Name of the array field in the row struct
+        element_index: Zero-based index of the element within the array
+        element_field: Name of the field within the struct element to modify
+        value: New value for the field
+
+    Example:
+        set_data_table_array_element(
+            "/Game/DataAssets/RTS_Stuff/DT_RTSButtonsInfos_Paul",
+            "BlackSmith",
+            "Buttons",
+            3,
+            "ButtonAction",
+            "UpgradeSeparateStructure"
+        )
+    """
+    unreal = get_unreal_connection()
+    if not unreal:
+        return {"success": False, "message": "Failed to connect to Unreal Engine"}
+    try:
+        params = {
+            "data_table_path": data_table_path,
+            "row_name": row_name,
+            "array_field": array_field,
+            "element_index": element_index,
+            "element_field": element_field,
+            "value": value
+        }
+        response = unreal.send_command("set_data_table_array_element", params)
+        return response or {"success": False, "message": "No response from Unreal"}
+    except Exception as e:
+        logger.error(f"set_data_table_array_element error: {e}")
+        return {"success": False, "message": str(e)}
+
+
 # Essential Blueprint Tools for Physics Actors
 @mcp.tool()
 def create_blueprint(name: str, parent_class: str) -> Dict[str, Any]:
